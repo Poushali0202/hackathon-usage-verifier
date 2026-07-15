@@ -1,0 +1,513 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RocketRide · Hackathon Usage Verifier</title>
+<style>
+  :root{
+    --bg:#060d14;
+    --teal1:#2dd4bf; --teal2:#0ea5b5;
+    --gold1:#facc15; --gold2:#f59e0b;
+    --cyan:#7fe3d0;
+    --ink:#dff1f5; --ink2:#eafcf7;
+    --muted:#7fa0ab;
+    --gfill:rgba(255,255,255,.05); --gbd:rgba(255,255,255,.12);
+    --review:#f6a58f;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  body{margin:0;min-height:100vh;color:var(--ink);
+    font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:
+      radial-gradient(1100px 700px at 8% -6%, rgba(20,184,166,.20), transparent 60%),
+      radial-gradient(1000px 700px at 96% 108%, rgba(56,189,248,.12), transparent 60%),
+      var(--bg);
+    background-attachment:fixed}
+  a{color:var(--cyan);text-decoration:none}
+  .mono{font-family:ui-monospace,"Cascadia Code",Menlo,Consolas,monospace}
+  .eyebrow{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);font-weight:600}
+  .muted{color:var(--muted)}
+
+  .glass{background:var(--gfill);border:1px solid var(--gbd);
+    -webkit-backdrop-filter:blur(16px) saturate(150%);backdrop-filter:blur(16px) saturate(150%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 18px 38px -24px rgba(0,0,0,.7);border-radius:16px}
+  @supports not ((-webkit-backdrop-filter:blur(2px)) or (backdrop-filter:blur(2px))){
+    .glass,.pane{background:rgba(16,26,36,.9)}}
+
+  /* ---- app bar ---- */
+  .appbar{display:flex;align-items:center;gap:18px;padding:12px 20px;border-bottom:1px solid rgba(255,255,255,.07);
+    position:sticky;top:0;z-index:20;background:rgba(6,13,20,.72);
+    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;letter-spacing:-.2px}
+  .dot{width:12px;height:12px;border-radius:50%;background:linear-gradient(135deg,var(--gold1),var(--teal1));
+    box-shadow:0 0 0 4px rgba(45,212,191,.14),0 0 14px rgba(250,204,21,.5)}
+  .tabs{display:flex;gap:4px;padding:3px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08)}
+  .tab{padding:7px 15px;border-radius:9px;color:var(--muted);cursor:pointer;font-weight:600;font-size:13px;border:0;background:transparent}
+  .tab.on{color:var(--bg);background:linear-gradient(135deg,var(--teal1),var(--teal2));box-shadow:0 4px 14px rgba(45,212,191,.35)}
+  .appbar .spacer{flex:1}
+  .progress{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted)}
+  .progress b{color:var(--ink)}
+  .pbar{width:120px;height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
+  .pbar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--teal1),var(--gold1));transition:width .3s}
+
+  /* ---- sub bar ---- */
+  .subbar{display:flex;align-items:center;gap:10px;padding:10px 20px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.06)}
+  .count{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.08)}
+  .count b{color:var(--ink)}
+  .count .sw{width:8px;height:8px;border-radius:50%}
+  .sw.yes{background:var(--gold1)} .sw.part{background:var(--teal1)} .sw.no{background:rgba(255,255,255,.35)} .sw.rev{background:var(--review)}
+  .subbar .spacer{flex:1}
+  .filters{display:flex;gap:6px}
+  .fbtn{font-size:12px;padding:5px 12px;border-radius:18px;border:1px solid rgba(255,255,255,.1);background:transparent;color:var(--muted);cursor:pointer;font-weight:600}
+  .fbtn.on{color:var(--ink2);border-color:var(--cyan);background:rgba(127,227,208,.10)}
+
+  /* ---- ribbon ---- */
+  .ribbon{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px 4px}
+  .rnode{padding:10px 15px;border-radius:14px;min-width:180px}
+  .rnode .v{font-weight:650;font-size:13.5px;margin-top:2px}
+  .rnode.local .v{color:var(--teal1)} .rnode.cloud .v{color:#7cc4ff}
+  .arrow{color:var(--muted);font-size:18px}
+
+  /* ---- inputs ---- */
+  .inputs{padding:12px 20px}
+  .ipanel{padding:16px 18px}
+  label.fld{display:block;font-size:10px;color:var(--cyan);margin:0 0 7px;text-transform:uppercase;letter-spacing:.12em;font-weight:600}
+  textarea,input[type=file]{width:100%;color:var(--ink);border-radius:12px;padding:12px;
+    background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.1);
+    font:13px/1.5 ui-monospace,"Cascadia Code",Menlo,Consolas,monospace}
+  textarea{min-height:96px;resize:vertical}
+  textarea::placeholder{color:var(--muted);opacity:.7}
+  textarea:focus,input[type=file]:focus{outline:none;border-color:var(--teal1);box-shadow:0 0 0 3px rgba(45,212,191,.16)}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .btn{background:linear-gradient(135deg,var(--teal1),var(--teal2));color:#04231f;border:0;padding:11px 20px;border-radius:12px;
+    font-weight:700;font-size:13.5px;cursor:pointer;box-shadow:0 8px 20px rgba(45,212,191,.3)}
+  .btn:hover{filter:brightness(1.06)} .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.gold{background:linear-gradient(135deg,var(--gold1),var(--gold2));color:#2b2103;box-shadow:0 8px 20px rgba(250,204,21,.3)}
+  .hint{color:var(--muted);font-size:12px}
+
+  /* ---- workspace ---- */
+  .wsscroll{overflow-x:auto;padding:8px 20px 40px}
+  .workspace{min-width:960px;display:grid;grid-template-columns:1.2fr 1fr;gap:18px;align-items:start}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;
+    max-height:calc(100vh - 320px);overflow-y:auto;padding:2px;align-content:start}
+  .empty{grid-column:1/-1;color:var(--muted);font-size:13px;padding:40px 10px;text-align:center}
+
+  /* ---- mini-strata card ---- */
+  .card{padding:13px 14px;border-radius:16px;cursor:pointer;position:relative;transition:transform .15s,box-shadow .15s;outline:none}
+  .card:hover{transform:translateY(-2px)}
+  .card:focus-visible{box-shadow:0 0 0 2px var(--cyan)}
+  .card.sel{box-shadow:0 0 0 2px #38bdf8,0 18px 38px -24px rgba(0,0,0,.7)}
+  .card.review{border-style:dashed;border-color:rgba(246,165,143,.5)}
+  .card .top{display:flex;gap:12px;align-items:flex-start}
+  .card .nm{font-weight:650;font-size:13.5px;line-height:1.25;word-break:break-word;flex:1}
+  .card .meta{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .card .bb{font-size:11px;color:var(--muted);font-weight:600}
+  .flags{display:flex;gap:5px;margin-left:auto}
+  .flag{font-size:9px;letter-spacing:.06em;font-weight:700;padding:2px 5px;border-radius:5px;border:1px solid rgba(255,255,255,.12);color:var(--muted)}
+  .flag.on{color:var(--cyan);border-color:rgba(127,227,208,.5);background:rgba(127,227,208,.08)}
+  .reviewtxt{font-size:11px;color:var(--review);font-weight:600;margin-top:8px}
+
+  /* tag pills */
+  .tag{font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .tag-Significant{color:#0a2b26;background:linear-gradient(135deg,#67e8d3,#facc15)}
+  .tag-Moderate{color:#2b2103;background:#fbbf24}
+  .tag-Less{color:#cfe0e6;background:rgba(255,255,255,.09)}
+  .tag-None{color:#3a0d0d;background:#f2a08f}
+
+  /* mini glyph */
+  .glyph{position:relative;width:42px;height:42px;flex:none}
+  .slabs{display:flex;flex-direction:column-reverse;gap:3px;height:100%;justify-content:center}
+  .slab{height:6px;border-radius:2px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.06)}
+  .slab.rr{background:linear-gradient(135deg,rgba(45,212,191,.6),rgba(20,160,180,.4));border-color:rgba(140,255,235,.5);box-shadow:0 0 8px rgba(45,212,191,.35)}
+  .slab.core{background:linear-gradient(135deg,rgba(250,204,21,.7),rgba(245,158,11,.45));border-color:rgba(255,224,130,.7);box-shadow:0 0 10px rgba(250,204,21,.45)}
+  .core-bracket{position:absolute;left:-6px;bottom:16.5px;width:3px;height:15px;border-radius:2px;
+    background:linear-gradient(var(--gold1),var(--gold2));box-shadow:0 0 8px rgba(250,204,21,.6)}
+
+  /* skeleton / busy */
+  .card.busy{cursor:default}
+  .sk{border-radius:6px;background:linear-gradient(90deg,rgba(255,255,255,.06),rgba(255,255,255,.14),rgba(255,255,255,.06));
+    background-size:200% 100%;animation:sh 1.2s linear infinite}
+  @keyframes sh{to{background-position:-200% 0}}
+  .sk.line{height:11px;margin:6px 0}
+
+  /* ---- detail panel ---- */
+  .detail{position:sticky;top:78px;padding:20px;max-height:calc(100vh - 100px);overflow-y:auto}
+  .detail h2{margin:0;font-size:19px;letter-spacing:-.3px}
+  .detail .team{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .dsec{margin-top:18px}
+  .dsec p{margin:5px 0 0;color:var(--ink);font-size:13.5px;line-height:1.55}
+  .links{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .lbtn{font-size:12px;font-weight:600;padding:7px 12px;border-radius:10px;border:1px solid rgba(127,227,208,.4);color:var(--cyan);background:rgba(127,227,208,.06)}
+  .lbtn.off{border-color:rgba(255,255,255,.1);color:var(--muted);background:transparent;pointer-events:none}
+  .digest{margin-top:8px;padding:11px 13px;border-radius:12px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.08);font-size:12px}
+  .digest code{color:var(--cyan)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .chips span{font-size:11px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:7px;padding:2px 8px;color:var(--muted)}
+  .detail .empty2{color:var(--muted);font-size:13px;padding:30px 4px;text-align:center}
+
+  /* ---- backbone tower (Option B) ---- */
+  .readhead{display:flex;align-items:baseline;gap:10px}
+  .verdict{font-weight:800;font-size:14px}
+  .verdict.Yes{color:var(--gold1)} .verdict.Partial{color:var(--teal1)} .verdict.No{color:var(--muted)}
+  .scene{position:relative;height:272px;perspective:1400px;margin-top:6px}
+  .tower{position:absolute;left:28%;top:53%;width:180px;height:118px;
+    transform:translate(-50%,-50%) rotateX(56deg) rotateZ(-42deg);transform-style:preserve-3d}
+  .pane{position:absolute;inset:0;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.16);
+    -webkit-backdrop-filter:blur(5px);backdrop-filter:blur(5px);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 26px 26px -18px rgba(0,0,0,.65)}
+  .pane.rr{background:linear-gradient(135deg,rgba(45,212,191,.42),rgba(20,160,180,.28));border-color:rgba(140,255,235,.55);
+    box-shadow:0 0 28px rgba(45,212,191,.36),inset 0 1px 0 rgba(255,255,255,.55),0 26px 26px -16px rgba(0,0,0,.6)}
+  .pane.core{background:linear-gradient(135deg,rgba(250,204,21,.5),rgba(245,158,11,.32));border-color:rgba(255,224,130,.72);
+    box-shadow:0 0 34px rgba(250,204,21,.42),inset 0 1px 0 rgba(255,255,255,.62),0 26px 26px -14px rgba(0,0,0,.6)}
+  .p0{transform:translateZ(0)} .p1{transform:translateZ(26px)} .p2{transform:translateZ(52px)}
+  .p3{transform:translateZ(78px)} .p4{transform:translateZ(104px)}
+  .leaders{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+  .callout{position:absolute;width:126px;display:flex;gap:7px;align-items:flex-start}
+  .cdot{width:9px;height:9px;border-radius:50%;margin-top:3px;flex:none}
+  .dot-core{background:var(--gold1);box-shadow:0 0 8px rgba(250,204,21,.7)}
+  .dot-rr{background:var(--teal1);box-shadow:0 0 8px rgba(45,212,191,.6)}
+  .dot-other{background:transparent;border:1.5px solid var(--muted)}
+  .dot-none{background:rgba(255,255,255,.16)}
+  .cname{font-size:11px;font-weight:700;color:var(--ink)}
+  .ctech{font-size:10px;color:var(--muted)}
+  .lb{display:inline-block;margin-top:3px;font-size:8.5px;font-weight:800;letter-spacing:.06em;color:#2b2103;
+    background:linear-gradient(135deg,var(--gold1),var(--gold2));padding:1px 5px;border-radius:5px}
+  .key{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)}
+  .key span{display:inline-flex;align-items:center;gap:6px}
+  .key i{width:9px;height:9px;border-radius:2px;display:inline-block}
+  .key .k-core{background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+  .key .k-rr{background:linear-gradient(135deg,var(--teal1),var(--teal2))}
+  .key .k-off{background:rgba(255,255,255,.14)}
+
+  @media (prefers-reduced-motion:reduce){.sk{animation:none} .card{transition:none}}
+</style>
+</head>
+<body>
+  <div class="appbar">
+    <div class="brand"><span class="dot"></span> Usage Verifier</div>
+    <div class="tabs" role="tablist">
+      <button class="tab on" data-tab="live" role="tab">Live</button>
+      <button class="tab" data-tab="batch" role="tab">Batch</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="progress">
+      <span><b id="pDone">0</b> / <b id="pTotal">0</b> classified</span>
+      <span class="pbar"><i id="pBar"></i></span>
+      <span class="mono" id="elapsed" title="Elapsed · SLA target 15:00">00:00 / 15:00</span>
+    </div>
+  </div>
+
+  <div class="subbar">
+    <span class="count"><span class="sw yes"></span> Backbone Yes <b id="cYes">0</b></span>
+    <span class="count"><span class="sw part"></span> Partial <b id="cPart">0</b></span>
+    <span class="count"><span class="sw no"></span> No <b id="cNo">0</b></span>
+    <span class="count"><span class="sw rev"></span> Needs review <b id="cRev">0</b></span>
+    <span class="spacer"></span>
+    <div class="filters" id="filters">
+      <button class="fbtn on" data-f="all">All</button>
+      <button class="fbtn" data-f="yes">Backbone Yes</button>
+      <button class="fbtn" data-f="part">Partial</button>
+      <button class="fbtn" data-f="review">Needs review</button>
+    </div>
+  </div>
+
+  <div class="ribbon">
+    <div class="rnode local glass"><div class="eyebrow">Pipeline A · Local</div><div class="v">Fetch GitHub evidence</div></div>
+    <span class="arrow">→</span>
+    <div class="rnode cloud glass"><div class="eyebrow">Pipeline B · RocketRide Cloud</div><div class="v">Classify usage</div></div>
+    <span class="arrow">→</span>
+    <div class="rnode glass"><div class="eyebrow">Output</div><div class="v">Tag · Backbone · Excel</div></div>
+  </div>
+
+  <div class="inputs">
+    <div class="ipanel glass" id="liveP">
+      <label class="fld" for="repos">GitHub repo URLs — one per line</label>
+      <textarea id="repos" placeholder="https://github.com/team/project&#10;https://github.com/another/repo"></textarea>
+      <div class="row"><button class="btn" id="runLive">Run</button>
+        <span class="hint">Each repo is fetched locally (A), then classified on RocketRide Cloud (B).</span>
+        <span id="dlSlot"></span></div>
+    </div>
+    <div class="ipanel glass" id="batchP" style="display:none">
+      <label class="fld" for="file">Submissions file (.csv / .xlsx)</label>
+      <input type="file" id="file" accept=".csv,.xlsx,.xls" />
+      <div class="row"><button class="btn" id="runBatch">Run</button>
+        <span class="hint">Runs the full sheet and builds the styled Excel with clickable links.</span>
+        <span id="dlSlot2"></span></div>
+    </div>
+  </div>
+
+  <div class="wsscroll">
+    <div class="workspace">
+      <div class="grid" id="grid"><div class="empty">Run a batch or paste repo URLs to begin.</div></div>
+      <div class="detail glass" id="detail"><div class="empty2">Select a project to see its full dossier and backbone read.</div></div>
+    </div>
+  </div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---- layer model (spec §7) ----
+const TOP2BASE = ['output','reasoning','orchestration','retrieval','ingest'];   // index 0..4, top->base
+const BASE2TOP = ['ingest','retrieval','orchestration','reasoning','output'];   // p0..p4, bottom->top
+const LOAD = {reasoning:1, orchestration:1};
+const NAMES = {output:'Output / UI', reasoning:'AI Reasoning', orchestration:'Orchestration',
+               retrieval:'Retrieval / RAG', ingest:'Ingest'};
+function paneState(key, raw){ if(raw!=='rocketride') return 'off'; return LOAD[key]?'core':'rr'; }
+function calloutInfo(key, raw){
+  const load=!!LOAD[key];
+  if(raw==='rocketride') return {load, dot:load?'dot-core':'dot-rr', tech:'RocketRide', name:NAMES[key]};
+  if(raw==='other')      return {load, dot:'dot-other', tech:'other platform', name:NAMES[key]};
+  return {load, dot:'dot-none', tech:'not present', name:NAMES[key]};
+}
+function normLayers(L){
+  const out={}; L=L||{};
+  for(const k of BASE2TOP){ const v=String(L[k]||'none').toLowerCase();
+    out[k]=['rocketride','other','none'].includes(v)?v:'none'; }
+  return out;
+}
+
+// ---- state ----
+const S={items:{}, digests:{}, order:[], sel:null, total:0, done:0, filter:'all', t0:null, timer:null, currentScene:null};
+
+function isReview(r){ return r.repo_accessible!==true || r.classify_failed===true; }
+function groupOf(r){ if(isReview(r)) return 'review'; const b=(r.backbone||'').toLowerCase();
+  return b==='yes'?'yes':b==='partial'?'part':'no'; }
+
+// ---- tabs ----
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  const live=t.dataset.tab==='live';
+  $('#liveP').style.display=live?'':'none'; $('#batchP').style.display=live?'none':'';
+});
+
+// ---- filters ----
+$('#filters').addEventListener('click',e=>{
+  const b=e.target.closest('.fbtn'); if(!b) return;
+  document.querySelectorAll('.fbtn').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); S.filter=b.dataset.f; applyFilter();
+});
+function applyFilter(){
+  document.querySelectorAll('.grid .card').forEach(c=>{
+    const g=c.dataset.group||'';
+    c.style.display=(S.filter==='all'||g===S.filter)?'':'none';
+  });
+}
+
+// ---- elapsed timer (honest count-up, spec §4.5) ----
+function fmt(s){ s=Math.max(0,Math.floor(s)); return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+function startTimer(){ S.t0=Date.now(); clearInterval(S.timer);
+  S.timer=setInterval(()=>{ $('#elapsed').textContent=fmt((Date.now()-S.t0)/1000)+' / 15:00'; },1000); }
+function stopTimer(){ clearInterval(S.timer); }
+
+// ---- counts ----
+function recount(){
+  let y=0,p=0,n=0,rv=0;
+  for(const i of S.order){ const r=S.items[i]; if(!r||!r._result) continue;
+    const g=groupOf(r); if(g==='review')rv++; else if(g==='yes')y++; else if(g==='part')p++; else n++; }
+  $('#cYes').textContent=y; $('#cPart').textContent=p; $('#cNo').textContent=n; $('#cRev').textContent=rv;
+  $('#pDone').textContent=S.done; $('#pTotal').textContent=S.total;
+  $('#pBar').style.width=(S.total?100*S.done/S.total:0)+'%';
+}
+
+// ---- cards ----
+function ensureCard(i, name){
+  let c=document.getElementById('card-'+i);
+  if(!c){
+    if($('#grid .empty')) $('#grid').innerHTML='';
+    c=document.createElement('div'); c.id='card-'+i; c.className='card glass busy';
+    c.innerHTML=`<div class="nm">${esc(name)||'(unnamed)'}</div>
+      <div class="sk line" style="width:70%"></div><div class="sk line" style="width:45%"></div>
+      <div class="muted" style="font-size:11px;margin-top:8px">classifying…</div>`;
+    $('#grid').appendChild(c); S.order.push(i);
+  }
+  return c;
+}
+function renderCard(i, r){
+  const c=ensureCard(i, r.project); const rev=isReview(r);
+  c.className='card glass'+(rev?' review':'')+(S.sel===i?' sel':'');
+  c.dataset.group=groupOf(r);
+  if(rev){
+    c.innerHTML=`<div class="top"><div class="nm">${esc(r.project)||'(unnamed)'}</div></div>
+      <div class="reviewtxt">⚠ inaccessible — needs review</div>
+      <div class="meta"><span class="bb">Backbone ${esc(r.backbone||'No')}</span>${flagsHTML(r)}</div>`;
+  } else {
+    c.innerHTML=`<div class="top">${glyphHTML(r.layers)}
+        <div class="nm">${esc(r.project)||'(unnamed)'}</div></div>
+      <div class="meta"><span class="tag tag-${esc(r.tag)}">${esc(r.tag)}</span>
+        <span class="bb">BB ${esc(r.backbone)}</span>${flagsHTML(r)}</div>`;
+  }
+  c.setAttribute('role','button'); c.setAttribute('tabindex','0');
+  c.title=r.description||'';
+  c.onclick=()=>select(i);
+  c.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); select(i);} };
+  if(S.filter!=='all' && c.dataset.group!==S.filter) c.style.display='none';
+}
+function flagsHTML(r){
+  const f=(on,l)=>`<span class="flag${on?' on':''}">${l}</span>`;
+  return `<span class="flags">${f(!!r.github,'GH')}${f(!!r.demo,'VID')}${f(!!r.deployed,'URL')}</span>`;
+}
+function glyphHTML(L){
+  L=normLayers(L);
+  const slabs=BASE2TOP.map(k=>`<div class="slab ${paneState(k,L[k])}"></div>`).join('');
+  return `<div class="glyph"><div class="slabs">${slabs}</div><div class="core-bracket"></div></div>`;
+}
+
+// ---- detail + tower ----
+function select(i){
+  S.sel=i;
+  document.querySelectorAll('.grid .card.sel').forEach(c=>c.classList.remove('sel'));
+  document.getElementById('card-'+i)?.classList.add('sel');
+  const r=S.items[i]; if(!r||!r._result) return;
+  renderDetail(r, S.digests[i]);
+}
+function linkBtn(url,label,offLabel){
+  return url ? `<a class="lbtn" href="${esc(url)}" target="_blank" rel="noopener">${label}</a>`
+             : `<span class="lbtn off">${offLabel}</span>`;
+}
+function renderDetail(r, digest){
+  const L=normLayers(r.layers), rev=isReview(r);
+  const team=[r.names,r.emails].filter(Boolean).join(' · ');
+  const ev=(r.evidence||[]).map(e=>`<span>${esc(e)}</span>`).join('');
+  const d=$('#detail');
+  d.innerHTML=`
+    <div class="readhead" style="justify-content:space-between">
+      <h2>${esc(r.project)||'(unnamed)'}</h2>
+      ${rev?'':`<span class="tag tag-${esc(r.tag)}">${esc(r.tag)}</span>`}
+    </div>
+    ${team?`<div class="team">${esc(team)}</div>`:''}
+    <div class="dsec"><div class="eyebrow">Links</div><div class="links">
+      ${linkBtn(r.github,'GitHub','No repo')}
+      ${linkBtn(r.demo,'Demo / Video','No demo')}
+      ${linkBtn(r.deployed,'Deployed','Not deployed')}
+    </div></div>
+    ${rev?`<div class="dsec"><p class="muted">This repository could not be accessed, so RocketRide usage
+        could not be verified from code. Flagged for correction; scored as zero. ${esc(r.notes||'')}</p></div>`:`
+    ${r.description?`<div class="dsec"><div class="eyebrow">Project description</div><p>${esc(r.description)}</p></div>`:''}
+    ${r.rocketride_usage?`<div class="dsec"><div class="eyebrow">How RocketRide was used &amp; how it helped</div><p>${esc(r.rocketride_usage)}</p></div>`:''}
+    <div class="dsec"><div class="readhead"><div class="eyebrow">Backbone read</div>
+      <span class="verdict ${esc(r.backbone)}">${esc(r.backbone)}</span></div>
+      ${towerHTML(L)}
+      <div class="key"><span><i class="k-core"></i> RocketRide · load-bearing</span>
+        <span><i class="k-rr"></i> RocketRide</span><span><i class="k-off"></i> not RocketRide</span></div>
+    </div>
+    ${digest?`<div class="dsec"><div class="eyebrow">Evidence handed to Cloud</div>
+      <div class="digest">${esc(digest.file_count??'?')} files ·
+        .pipe: ${digestArr(digest.pipe_files)} · deps: ${digestArr(digest.rocketride_dependencies)}<br>
+        signals: ${digestArr(digest.source_signals)} · other: ${digestArr(digest.other_platforms)}</div>
+      ${ev?`<div class="chips">${ev}</div>`:''}</div>`:(ev?`<div class="dsec"><div class="eyebrow">Evidence</div><div class="chips">${ev}</div></div>`:'')}
+    ${r.justification?`<div class="dsec"><div class="eyebrow">Why this classification</div><p>${esc(r.justification)}</p></div>`:''}
+    ${r.notes?`<div class="dsec"><div class="eyebrow">Additional notes</div><p class="muted">${esc(r.notes)}</p></div>`:''}
+    `}`;
+  const scene=d.querySelector('.scene'); S.currentScene=scene;
+  if(scene) requestAnimationFrame(()=>requestAnimationFrame(()=>layoutCallouts(scene)));
+}
+function digestArr(a){ return (a&&a.length)?a.map(x=>`<code>${esc(x)}</code>`).join(', '):'<span class="muted">none</span>'; }
+function towerHTML(L){
+  const panes=BASE2TOP.map((k,i)=>{
+    const st=paneState(k,L[k]); const dl=TOP2BASE.indexOf(k);
+    return `<div class="pane p${i} ${st}" data-layer="${dl}"></div>`;
+  }).join('');
+  const callouts=TOP2BASE.map((k,ci)=>{
+    const info=calloutInfo(k,L[k]);
+    return `<div class="callout" data-ci="${ci}"><span class="cdot ${info.dot}"></span>
+      <div><div class="cname">${info.name}</div><div class="ctech">${info.tech}</div>
+      ${info.load?'<span class="lb">Load-bearing</span>':''}</div></div>`;
+  }).join('');
+  return `<div class="scene"><div class="tower">${panes}</div><svg class="leaders"></svg>${callouts}</div>`;
+}
+
+// leader-line layout (spec §10.4)
+function layoutCallouts(scene){
+  if(!scene) return;
+  const svg=scene.querySelector('.leaders'); if(!svg) return;
+  const sr=scene.getBoundingClientRect(), W=sr.width, H=sr.height;
+  const calloutX=W-128, pad=14, span=H-pad*2;
+  svg.innerHTML='';
+  for(let i=0;i<5;i++){
+    const pane=scene.querySelector(`.pane[data-layer="${i}"]`);
+    const el=scene.querySelector(`.callout[data-ci="${i}"]`);
+    if(!pane||!el) continue;
+    const pr=pane.getBoundingClientRect();
+    const px=pr.right-sr.left-8, py=(pr.top+pr.bottom)/2-sr.top;
+    const cy=pad+span*i/4;
+    el.style.left=calloutX+'px'; el.style.top=(cy-8)+'px';
+    const ax=calloutX-6, ay=cy+4, mx=(px+ax)/2;
+    const line=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    line.setAttribute('points',`${px},${py} ${mx},${py} ${ax},${ay}`);
+    line.setAttribute('fill','none'); line.setAttribute('stroke','rgba(127,227,208,.55)'); line.setAttribute('stroke-width','1');
+    svg.appendChild(line);
+    const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx',px); dot.setAttribute('cy',py); dot.setAttribute('r','2.4'); dot.setAttribute('fill','#7fe3d0');
+    svg.appendChild(dot);
+  }
+}
+window.addEventListener('resize',()=>{ if(S.currentScene) layoutCallouts(S.currentScene); });
+
+// ---- download ----
+function showDownload(url,count){
+  if(!url) return;
+  const html=`<a class="btn gold" href="${esc(url)}">⬇ Download Excel (${count})</a>`;
+  $('#dlSlot').innerHTML=html; $('#dlSlot2').innerHTML=html;
+}
+
+// ---- NDJSON stream ----
+async function stream(resp){
+  const reader=resp.body.getReader(), dec=new TextDecoder(); let buf='';
+  while(true){
+    const {value,done}=await reader.read(); if(done) break;
+    buf+=dec.decode(value,{stream:true}); const lines=buf.split('\n'); buf=lines.pop();
+    for(const line of lines){ if(!line.trim()) continue; let m; try{m=JSON.parse(line)}catch{continue} handle(m); }
+  }
+}
+function handle(m){
+  if(m.event==='start'){ S.total=m.total; recount(); }
+  else if(m.event==='stage'){
+    ensureCard(m.index, m.project);
+    if(m.stage==='classify' && m.digest) S.digests[m.index]=m.digest;
+  }
+  else if(m.event==='result'){
+    const r=m.result; r._result=true; S.items[m.index]=r; S.done++;
+    if(m.total) S.total=m.total;
+    renderCard(m.index, r); recount();
+    if(S.sel==null) select(m.index);
+  }
+  else if(m.event==='done'){ stopTimer(); showDownload(m.download, m.count); recount(); }
+}
+
+function resetRun(){
+  S.items={}; S.digests={}; S.order=[]; S.sel=null; S.total=0; S.done=0;
+  $('#grid').innerHTML='<div class="empty">Working…</div>';
+  $('#detail').innerHTML='<div class="empty2">Select a project to see its full dossier and backbone read.</div>';
+  $('#dlSlot').innerHTML=''; $('#dlSlot2').innerHTML=''; recount(); startTimer();
+}
+
+// ---- run: live ----
+$('#runLive').onclick=async()=>{
+  const urls=$('#repos').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!urls.length) return;
+  resetRun(); $('#runLive').disabled=true;
+  try{
+    const resp=await fetch('/api/verify/stream',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({repos:urls.map(u=>({github:u}))})});
+    await stream(resp);
+  }catch(e){ $('#grid').innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; }
+  stopTimer(); $('#runLive').disabled=false;
+};
+// ---- run: batch ----
+$('#runBatch').onclick=async()=>{
+  const f=$('#file').files[0]; if(!f){ $('#grid').innerHTML='<div class="empty">Choose a file first.</div>'; return; }
+  resetRun(); $('#runBatch').disabled=true;
+  const fd=new FormData(); fd.append('file',f);
+  try{
+    const resp=await fetch('/api/batch',{method:'POST',body:fd});
+    if(!resp.ok){ throw new Error(await resp.text()); }
+    await stream(resp);
+  }catch(e){ $('#grid').innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; }
+  stopTimer(); $('#runBatch').disabled=false;
+};
+</script>
+</body>
+</html>

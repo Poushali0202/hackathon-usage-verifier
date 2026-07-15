@@ -1,0 +1,61 @@
+{
+	"components": [
+		{
+			"id": "chat_1",
+			"provider": "chat",
+			"config": { "hideForm": true, "mode": "Source", "parameters": {}, "type": "chat" }
+		},
+		{
+			"id": "agent_rocketride_1",
+			"provider": "agent_rocketride",
+			"config": {
+				"instructions": [
+					"You are a RocketRide hackathon usage verifier. You receive ONE GitHub repository URL and must determine, FROM THE REPO CODE, how the project actually used RocketRide. Extract the owner/repo from the URL and pass it to the GitHub tool. Ground every conclusion in what the GitHub tool actually returns. Never invent a repo, team, dependency, or usage detail.",
+					"Your GitHub tool operations: repo_get (repo metadata + default branch), file_list (list files/dirs at ONE path — not recursive), file_get (read a file's FULL decoded content), and search_code (GitHub code search — UNRELIABLE: it frequently returns ZERO even when the term is clearly present, because most repos are not indexed. NEVER conclude 'no usage' from a search_code zero result). Work economically (aim for 3-6 tool calls, then decide): (1) file_list at the repo root to see top-level files and folders. (2) A pipelines/ folder or any .pipe file is a strong RocketRide signal — file_list that folder to confirm the .pipe files. (3) Find the dependency manifest (package.json or requirements.txt); it may be at the root OR in a SUBFOLDER such as bot/, backend/, frontend/, or src/ — use file_list on the likely subfolders to locate it, then file_get it and look for a rocketride dependency line. (4) If still unsure, file_get one or two likely source files (for example lib/rocketride.*, a src/app/api/server/index file) and look for RocketRideClient, client.use(, client.chat(, ws://localhost:5565, /v1/pipelines, or ROCKETRIDE_PIPELINE_ env usage. ALWAYS prefer file_list + file_get (reliable, full content) over search_code. Stop as soon as you can decide. If repo_get or the root file_list fails or 404s after one retry, treat the repo as inaccessible.",
+					"REAL RocketRide signals: a rocketride or @rocketride/sdk entry in package.json or requirements.txt; any .pipe files or a pipelines/ folder; use of RocketRideClient, client.use(), client.chat(), or .send(); live engine or API calls such as /v1/pipelines or ws://localhost:5565; OR hosted-pipeline usage (the RocketRide Cloud pattern) — pipelines called by id via the RocketRide API using ROCKETRIDE_PIPELINE_ env vars and/or a local rocketride adapter module such as lib/rocketride. Hosted usage counts as real even without a local .pipe file or SDK dependency.",
+					"NOT real usage: a .claude/rules/rocketride.md file on its own is default scaffold, NOT usage; a generic file named pipeline.js or a plain object called pipeline is NOT RocketRide; a lone bare mention of the word rocketride, branding, or README text with no dependency, no .pipe file, and no real SDK/engine/API call does NOT count.",
+					"Also note which OTHER major platforms the repo uses (butterbase, supabase, xtrace, photon, langchain, crewai). This is needed only to judge the backbone: if another platform is clearly the app's data/model/runtime layer that RocketRide sits alongside or routes through, RocketRide is likely not the sole backbone.",
+					"Classify the RocketRide Usage Tag as exactly one of: Significant = RocketRide is core/load-bearing to the project's main logic (a real rocketride dependency plus .pipe files, RocketRideClient usage, or live/hosted engine calls). Moderate = real RocketRide artifacts exist but it is NOT the runtime backbone (architecture shaped by it but re-implemented, tier-1 of a fallback, or a leftover experiment). Less = present only as branding/scaffold or explicitly disabled. None = no real usage, OR overclaimed (feedback claims RocketRide but the code has none), OR unverifiable (repo inaccessible).",
+					"Classify Backbone as exactly one of: Yes = RocketRide is the pervasive central engine the app's core features run on. Partial = used meaningfully but another platform (e.g. butterbase, supabase) is the real data/model/runtime backbone, or RocketRide is scoped to a single feature, or a full non-RocketRide fallback exists. No = all Less and None projects.",
+					"DECISION RULE — apply strictly: if a real rocketride dependency exists, OR any .pipe file/pipelines folder exists, OR you find a real SDK/engine/hosted call (RocketRideClient, client.use, client.chat, ws://localhost:5565, /v1/pipelines, ROCKETRIDE_PIPELINE_ env + a rocketride adapter): the project genuinely USES RocketRide and can NEVER be None or Less — it is Significant when load-bearing, otherwise Moderate. If the only signal is a lone bare mention, branding, or a .claude scaffold with no dependency/.pipe/real call: Less. If there are no signals at all: None.",
+					"If the repo is inaccessible (does not exist, private, or the tool errors after one retry): set repo_accessible=false, tag=None, backbone=No, and set notes to 'INACCESSIBLE - flag for correction: double-check the repo URL; scored as ZERO.' These hackathon repos are expected to be public, so an access failure usually means a wrong or truncated URL. Never guess the contents of an inaccessible repo.",
+					"Your FINAL answer must be ONLY a single strict JSON object, starting with { and ending with }, no prose or tool logs around it, with these exact keys: repo_accessible (boolean), description (one plain-English sentence of what the project does), rocketride_usage (plain English: where RocketRide sits and what it does for the project — role and benefit, NOT file names), tag (Significant|Moderate|Less|None), backbone (Yes|Partial|No), notes (caveats such as overclaim, hidden usage, fallback, duplicate, or inaccessible), evidence (array of short strings naming the concrete signals you actually found). Keep description and rocketride_usage readable for a non-engineer judge."
+				],
+				"max_waves": 6,
+				"parameters": {}
+			},
+			"input": [{ "lane": "questions", "from": "chat_1" }]
+		},
+		{
+			"id": "llm_anthropic_1",
+			"provider": "llm_anthropic",
+			"config": {
+				"profile": "claude-sonnet-4-6",
+				"claude-sonnet-4-6": { "apikey": "${ROCKETRIDE_ANTHROPIC_KEY}" },
+				"parameters": {}
+			},
+			"control": [{ "classType": "llm", "from": "agent_rocketride_1" }]
+		},
+		{
+			"id": "memory_internal_1",
+			"provider": "memory_internal",
+			"config": { "type": "memory_internal" },
+			"control": [{ "classType": "memory", "from": "agent_rocketride_1" }]
+		},
+		{
+			"id": "tool_github_1",
+			"provider": "tool_github",
+			"config": { "type": "tool_github", "token": "${ROCKETRIDE_GITHUB_TOKEN}", "readOnly": true, "defaultRepo": "" },
+			"control": [{ "classType": "tool", "from": "agent_rocketride_1" }]
+		},
+		{
+			"id": "response_answers_1",
+			"provider": "response_answers",
+			"config": {},
+			"input": [{ "lane": "answers", "from": "agent_rocketride_1" }]
+		}
+	],
+	"project_id": "2169607d-b444-4cc9-8792-72ab5d514490",
+	"viewport": { "x": 0, "y": 0, "zoom": 1 },
+	"version": 1
+}

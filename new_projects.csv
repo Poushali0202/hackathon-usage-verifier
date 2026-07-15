@@ -1,0 +1,51 @@
+﻿Project title,Team Members Names,Team Members Emails,Github Repo,Feedback
+Test,n/a,n/a,n/a,n/a
+Savoir,"Emilian Scheel 
+Maddox Sciuchetti
+Kiwon Cho","maddox.sciuchetti@code.berlin
+ckiwon7@gmail.com
+emilian.scheel@gmail.com",https://github.com/emilianscheel/savoir,Great hackathon with a lot to learn
+Pager-Zero,"Emanuel Gonzalez
+Ranjiv Jithendran","emanpiece@gmail.com
+ranjiv.jithendran@gmail.com",https://github.com/Eman-Gon/Pager-Zero,Well done!
+Vertex,Abhay Padmanabhan,abhaypadmanabhan98@gmail.com,https://github.com/abhaypadmanabhan/vertex,Great hackathon — ButterBase was smooth to build on.
+ReminiScene,"Dino Wun
+Kirai Oguri
+Reema Gadiyar
+Sharvinee Rao","shaevineer@gmail.com
+reemagadiyar@gmail.com
+oguri05052003@gmail.com
+mightygboole1815@gmail.com",https://github.com/kiran172/ReminiScene,N/A
+Grapevine,Taleb Ahsan,taleb.ahsan@icloud.com,https://github.com/taleb-ahsan/grapevine-bio,Wish we had more time to work. Otherwise we had a good time.
+FleetGraph,"Soham Kayal, Aditya Pawar","skayal1@ucsc.edu, pawar.aditya0401@gmail.com",https://github.com/Sohamkayal4103/fleetgraph,"Fantastic sponsor tooling. Butterbase's MCP let us stand up the entire backend conversationally (Postgres DB, email auth, a sim-credits economy, and an OpenAI-compatible AI gateway), RocketRide hosted our natural-language to Cypher 'fleet analyst' pipeline, and Neo4j Aura powered the V2V relay-path queries. Three sponsors, one coherent driving-safety demo."
+Dragnet — Real-Time Fraud-Ring Detector,NarasingaMoorthy VeiluKanthaPerumal,vnarasingamoorthy@gmail.com,https://github.com/vnmoorthy/dragnet,amazing...but bad....hackathon submission... steps
+Voltaire - Universal Search,"Toyeshh Medikonda
+Michael Mazilu","toyeshh@utexas.edu
+michaelmazilu08@gmail.com",https://github.com/michaelmazilu/voltaire,List prizes more explicitly and put all the promotion codes in an organized place so people can access them better and use the tools more easily
+"Fathom — Supply Chain Risk Navigator
+which models a company's supplier
+network as a live graph, so a single point of failure (like a factory
+disruption) can be traced through its full cascade in seconds instead of
+days. Built on Neo4j for real graph traversal (blast-radius and
+betweenness-centrality queries over supplier relationships) and
+Butterbase for authentication, database, and functions — including a
+deployed serverless function that runs the live Cypher cascade query.
+RocketRide runs locally rather than on Cloud, per organizer guidance
+given a Cloud platform issue at the time of building.",Roopa Gangadhar Devihosur,roopagangadhar.devihosur@sjsu.edu,https://github.com/roopadevihosur-07/Fathom_Supply_Chain_Risk_Navigator/tree/main,"Email	                       Password	                  Role
+admin@fathom.com	Fathom@2026!	Full access + disruption simulator
+manager@fathom.com	Fathom@2026!	Concerns + suggestions
+user@fathom.com	Fathom@2026!	Report concerns
+Fathom is a supply chain risk navigator that models a company's supplier
+network as a live graph, so a single point of failure (like a factory
+disruption) can be traced through its full cascade in seconds instead of
+days. Built on Neo4j for real graph traversal (blast-radius and
+betweenness-centrality queries over supplier relationships) and
+Butterbase for authentication, database, and functions — including a
+deployed serverless function that runs the live Cypher cascade query.
+RocketRide runs locally rather than on Cloud, per organizer guidance
+given a Cloud platform issue at the time of building."
+Rivalry,"Spencer Hoberman
+Krishen Goswami
+Piam Parekh","shoberman@icloud.com
+krishengoswami@utern.ai
+piamparekh17@gmail.com",https://github.com/Shoberman2/hackWithBay3.0/tree/build,It was great!

@@ -1,0 +1,22 @@
+# Render blueprint — native Python runtime.
+# This project folder (hackathon-usage-verifier) is the repo root you deploy.
+# Set the four ROCKETRIDE_* secrets in the Render dashboard (sync:false → never stored in git).
+services:
+  - type: web
+    name: rocketride-usage-verifier
+    runtime: python
+    plan: starter                 # keeps the instance warm; bump for large batches / more memory
+    buildCommand: pip install -r app/requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: ROCKETRIDE_URI
+        sync: false
+      - key: ROCKETRIDE_APIKEY
+        sync: false
+      - key: ROCKETRIDE_ANTHROPIC_KEY
+        sync: false
+      - key: ROCKETRIDE_GITHUB_TOKEN
+        sync: false

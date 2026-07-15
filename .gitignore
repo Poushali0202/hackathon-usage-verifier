@@ -1,0 +1,19 @@
+# --- secrets: NEVER commit ---
+.env
+*.local.env
+
+# --- generated outputs ---
+*.xlsx
+needs_review.csv
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# --- os / editor ---
+.DS_Store
+Thumbs.db
+*.swp
