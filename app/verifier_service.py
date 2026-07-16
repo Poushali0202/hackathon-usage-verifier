@@ -197,6 +197,11 @@ async def verify_row(row: dict, pool: ClassifierPool):
     """
     started = time.perf_counter()
     url = row.get("github", "")
+    # Live mode submits only a URL; fall back to the repo name so cards/detail/Excel aren't "(unnamed)"
+    if not (row.get("project") or "").strip():
+        pr = rb.parse_repo(url)
+        if pr:
+            row = {**row, "project": pr[1]}
     project = row.get("project", "") or "(unnamed)"
 
     if rb.repo_missing(url):
