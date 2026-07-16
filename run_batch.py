@@ -40,13 +40,15 @@ GH_TOKEN = None  # set in main()
 # ---- column resolution (headers vary: spaces, "(ALL)", case) -----------------
 
 FIELD_ALIASES = {
-    "project": ["projecttitle", "projectname", "project"],
-    "names": ["teammembersnamesall", "teammembersnames", "names", "teammembers"],
-    "emails": ["teammembersemailsall", "teammembersemails", "emails", "email"],
-    "github": ["githubrepo", "githuburl", "github", "repository", "repo"],
+    "project": ["projecttitle", "projectname", "project", "name", "title"],
+    "names": ["teammembersnamesall", "teammembersnames", "names", "teammembers", "teamname"],
+    "emails": ["teammembersemailsall", "teammembersemails", "teamemails", "emails", "email"],
+    "github": ["githubrepo", "githuburl", "githublink", "github", "gitlink", "gitrepo",
+               "gitrepository", "gitrepolink", "repository", "repolink", "repositoryurl", "repo", "codelink"],
     "feedback": ["feedback"],
     "demo": ["videodemopresentation", "demopresentation", "demovideo", "demo", "presentation", "video"],
-    "deployed": ["deployedprojecturl", "deployedurl", "liveurl"],
+    "deployed": ["deployedprojecturl", "deployedurl", "liveappurl", "liveapp", "livelink", "liveurl",
+                 "hostedurl", "deployment"],
 }
 
 
@@ -55,15 +57,28 @@ def _norm(s: str) -> str:
 
 
 def _resolve_headers(headers: list) -> dict:
+    """Map CSV/XLSX headers to canonical fields. Two passes: exact alias match first
+    (reliable), then substring — but substring only uses aliases >=5 chars so a short,
+    generic alias like 'name' can't grab 'Team Members Names' or 'repo' grab 'Reporting'."""
     mapping = {}
-    normed = {h: _norm(h) for h in headers}
-    for canonical, aliases in FIELD_ALIASES.items():
-        for h, nh in normed.items():
-            if h in mapping.values():
+    normed = [(h, _norm(h)) for h in headers]
+    used = set()
+
+    def claim(canonical, pred):
+        for h, nh in normed:
+            if h in used:
                 continue
-            if any(nh == a or a in nh for a in aliases):
+            if pred(nh):
                 mapping[canonical] = h
-                break
+                used.add(h)
+                return
+
+    for canonical, aliases in FIELD_ALIASES.items():          # pass 1: exact
+        claim(canonical, lambda nh, al=aliases: nh in al)
+    for canonical, aliases in FIELD_ALIASES.items():          # pass 2: substring (longer aliases only)
+        if canonical not in mapping:
+            longs = [a for a in aliases if len(a) >= 5]
+            claim(canonical, lambda nh, al=longs: any(a in nh for a in al))
     return mapping
 
 
