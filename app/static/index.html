@@ -9,6 +9,7 @@
     --bg:#060d14;
     --teal1:#2dd4bf; --teal2:#0ea5b5;
     --gold1:#facc15; --gold2:#f59e0b;
+    --green1:#4ade80; --green2:#22c55e;
     --cyan:#7fe3d0;
     --ink:#dff1f5; --ink2:#eafcf7;
     --muted:#7fa0ab;
@@ -51,23 +52,18 @@
   .pbar{width:120px;height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
   .pbar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--teal1),var(--gold1));transition:width .3s}
 
-  /* ---- sub bar ---- */
-  .subbar{display:flex;align-items:center;gap:10px;padding:10px 20px;flex-wrap:wrap;border-bottom:1px solid rgba(255,255,255,.06)}
+  /* ---- results toolbar (counts + filters, sits above the grid) ---- */
+  .gridcol{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .gridbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .gridbar .counts{display:flex;gap:8px;flex-wrap:wrap}
+  .gridbar .spacer{flex:1}
   .count{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.08)}
   .count b{color:var(--ink)}
   .count .sw{width:8px;height:8px;border-radius:50%}
-  .sw.yes{background:var(--gold1)} .sw.part{background:var(--teal1)} .sw.no{background:rgba(255,255,255,.35)} .sw.rev{background:var(--review)}
-  .subbar .spacer{flex:1}
-  .filters{display:flex;gap:6px}
+  .sw.yes{background:var(--green1)} .sw.part{background:var(--teal1)} .sw.no{background:rgba(255,255,255,.35)} .sw.rev{background:var(--review)}
+  .filters{display:flex;gap:6px;flex-wrap:wrap}
   .fbtn{font-size:12px;padding:5px 12px;border-radius:18px;border:1px solid rgba(255,255,255,.1);background:transparent;color:var(--muted);cursor:pointer;font-weight:600}
   .fbtn.on{color:var(--ink2);border-color:var(--cyan);background:rgba(127,227,208,.10)}
-
-  /* ---- ribbon ---- */
-  .ribbon{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 20px 4px}
-  .rnode{padding:10px 15px;border-radius:14px;min-width:180px}
-  .rnode .v{font-weight:650;font-size:13.5px;margin-top:2px}
-  .rnode.local .v{color:var(--teal1)} .rnode.cloud .v{color:#7cc4ff}
-  .arrow{color:var(--muted);font-size:18px}
 
   /* ---- inputs ---- */
   .inputs{padding:12px 20px}
@@ -90,7 +86,7 @@
   .wsscroll{overflow-x:auto;padding:8px 20px 40px}
   .workspace{min-width:960px;display:grid;grid-template-columns:1.2fr 1fr;gap:18px;align-items:start}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;
-    max-height:calc(100vh - 320px);overflow-y:auto;padding:2px;align-content:start}
+    max-height:calc(100vh - 300px);overflow-y:auto;padding:2px;align-content:start}
   .empty{grid-column:1/-1;color:var(--muted);font-size:13px;padding:40px 10px;text-align:center}
 
   /* ---- mini-strata card ---- */
@@ -120,9 +116,9 @@
   .slabs{display:flex;flex-direction:column-reverse;gap:3px;height:100%;justify-content:center}
   .slab{height:6px;border-radius:2px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.06)}
   .slab.rr{background:linear-gradient(135deg,rgba(45,212,191,.6),rgba(20,160,180,.4));border-color:rgba(140,255,235,.5);box-shadow:0 0 8px rgba(45,212,191,.35)}
-  .slab.core{background:linear-gradient(135deg,rgba(250,204,21,.7),rgba(245,158,11,.45));border-color:rgba(255,224,130,.7);box-shadow:0 0 10px rgba(250,204,21,.45)}
+  .slab.core{background:linear-gradient(135deg,rgba(74,222,128,.7),rgba(34,197,94,.45));border-color:rgba(134,239,172,.7);box-shadow:0 0 10px rgba(74,222,128,.45)}
   .core-bracket{position:absolute;left:-6px;bottom:16.5px;width:3px;height:15px;border-radius:2px;
-    background:linear-gradient(var(--gold1),var(--gold2));box-shadow:0 0 8px rgba(250,204,21,.6)}
+    background:linear-gradient(var(--green1),var(--green2));box-shadow:0 0 8px rgba(74,222,128,.6)}
 
   /* skeleton / busy */
   .card.busy{cursor:default}
@@ -132,7 +128,7 @@
   .sk.line{height:11px;margin:6px 0}
 
   /* ---- detail panel ---- */
-  .detail{position:sticky;top:78px;padding:20px;max-height:calc(100vh - 100px);overflow-y:auto}
+  .detail{position:sticky;top:66px;padding:20px;max-height:calc(100vh - 90px);overflow-y:auto}
   .detail h2{margin:0;font-size:19px;letter-spacing:-.3px}
   .detail .team{color:var(--muted);font-size:12.5px;margin-top:3px}
   .dsec{margin-top:18px}
@@ -149,7 +145,7 @@
   /* ---- backbone tower (Option B) ---- */
   .readhead{display:flex;align-items:baseline;gap:10px}
   .verdict{font-weight:800;font-size:14px}
-  .verdict.Yes{color:var(--gold1)} .verdict.Partial{color:var(--teal1)} .verdict.No{color:var(--muted)}
+  .verdict.Yes{color:var(--green1)} .verdict.Partial{color:var(--teal1)} .verdict.No{color:var(--muted)}
   .scene{position:relative;height:272px;perspective:1400px;margin-top:6px}
   .tower{position:absolute;left:28%;top:53%;width:180px;height:118px;
     transform:translate(-50%,-50%) rotateX(56deg) rotateZ(-42deg);transform-style:preserve-3d}
@@ -158,25 +154,26 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 26px 26px -18px rgba(0,0,0,.65)}
   .pane.rr{background:linear-gradient(135deg,rgba(45,212,191,.42),rgba(20,160,180,.28));border-color:rgba(140,255,235,.55);
     box-shadow:0 0 28px rgba(45,212,191,.36),inset 0 1px 0 rgba(255,255,255,.55),0 26px 26px -16px rgba(0,0,0,.6)}
-  .pane.core{background:linear-gradient(135deg,rgba(250,204,21,.5),rgba(245,158,11,.32));border-color:rgba(255,224,130,.72);
-    box-shadow:0 0 34px rgba(250,204,21,.42),inset 0 1px 0 rgba(255,255,255,.62),0 26px 26px -14px rgba(0,0,0,.6)}
+  .pane.core{background:linear-gradient(135deg,rgba(74,222,128,.5),rgba(34,197,94,.32));border-color:rgba(134,239,172,.72);
+    box-shadow:0 0 34px rgba(74,222,128,.42),inset 0 1px 0 rgba(255,255,255,.62),0 26px 26px -14px rgba(0,0,0,.6)}
   .p0{transform:translateZ(0)} .p1{transform:translateZ(26px)} .p2{transform:translateZ(52px)}
   .p3{transform:translateZ(78px)} .p4{transform:translateZ(104px)}
   .leaders{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
   .callout{position:absolute;width:126px;display:flex;gap:7px;align-items:flex-start}
   .cdot{width:9px;height:9px;border-radius:50%;margin-top:3px;flex:none}
-  .dot-core{background:var(--gold1);box-shadow:0 0 8px rgba(250,204,21,.7)}
+  .dot-core{background:var(--green1);box-shadow:0 0 8px rgba(74,222,128,.7)}
   .dot-rr{background:var(--teal1);box-shadow:0 0 8px rgba(45,212,191,.6)}
   .dot-other{background:transparent;border:1.5px solid var(--muted)}
   .dot-none{background:rgba(255,255,255,.16)}
   .cname{font-size:11px;font-weight:700;color:var(--ink)}
   .ctech{font-size:10px;color:var(--muted)}
-  .lb{display:inline-block;margin-top:3px;font-size:8.5px;font-weight:800;letter-spacing:.06em;color:#2b2103;
-    background:linear-gradient(135deg,var(--gold1),var(--gold2));padding:1px 5px;border-radius:5px}
+  .lb{display:inline-block;margin-top:3px;font-size:8.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;border-radius:5px}
+  .lb.on{color:#04120b;background:linear-gradient(135deg,var(--green1),var(--green2))}
+  .lb.off{color:var(--muted);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12)}
   .key{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--muted)}
   .key span{display:inline-flex;align-items:center;gap:6px}
   .key i{width:9px;height:9px;border-radius:2px;display:inline-block}
-  .key .k-core{background:linear-gradient(135deg,var(--gold1),var(--gold2))}
+  .key .k-core{background:linear-gradient(135deg,var(--green1),var(--green2))}
   .key .k-rr{background:linear-gradient(135deg,var(--teal1),var(--teal2))}
   .key .k-off{background:rgba(255,255,255,.14)}
 
@@ -198,27 +195,7 @@
     </div>
   </div>
 
-  <div class="subbar">
-    <span class="count"><span class="sw yes"></span> Backbone Yes <b id="cYes">0</b></span>
-    <span class="count"><span class="sw part"></span> Partial <b id="cPart">0</b></span>
-    <span class="count"><span class="sw no"></span> No <b id="cNo">0</b></span>
-    <span class="count"><span class="sw rev"></span> Needs review <b id="cRev">0</b></span>
-    <span class="spacer"></span>
-    <div class="filters" id="filters">
-      <button class="fbtn on" data-f="all">All</button>
-      <button class="fbtn" data-f="yes">Backbone Yes</button>
-      <button class="fbtn" data-f="part">Partial</button>
-      <button class="fbtn" data-f="review">Needs review</button>
-    </div>
-  </div>
-
-  <div class="ribbon">
-    <div class="rnode local glass"><div class="eyebrow">Pipeline A · Local</div><div class="v">Fetch GitHub evidence</div></div>
-    <span class="arrow">→</span>
-    <div class="rnode cloud glass"><div class="eyebrow">Pipeline B · RocketRide Cloud</div><div class="v">Classify usage</div></div>
-    <span class="arrow">→</span>
-    <div class="rnode glass"><div class="eyebrow">Output</div><div class="v">Tag · Backbone · Excel</div></div>
-  </div>
+  <!-- counts + filters now live in the workspace toolbar below; architecture ribbon removed -->
 
   <div class="inputs">
     <div class="ipanel glass" id="liveP">
@@ -239,7 +216,24 @@
 
   <div class="wsscroll">
     <div class="workspace">
-      <div class="grid" id="grid"><div class="empty">Run a batch or paste repo URLs to begin.</div></div>
+      <div class="gridcol">
+        <div class="gridbar">
+          <div class="counts">
+            <span class="count"><span class="sw yes"></span> Backbone Yes <b id="cYes">0</b></span>
+            <span class="count"><span class="sw part"></span> Partial <b id="cPart">0</b></span>
+            <span class="count"><span class="sw no"></span> No <b id="cNo">0</b></span>
+            <span class="count"><span class="sw rev"></span> Needs review <b id="cRev">0</b></span>
+          </div>
+          <div class="spacer"></div>
+          <div class="filters" id="filters">
+            <button class="fbtn on" data-f="all">All</button>
+            <button class="fbtn" data-f="yes">Backbone Yes</button>
+            <button class="fbtn" data-f="part">Partial</button>
+            <button class="fbtn" data-f="review">Needs review</button>
+          </div>
+        </div>
+        <div class="grid" id="grid"><div class="empty">Run a batch or paste repo URLs to begin.</div></div>
+      </div>
       <div class="detail glass" id="detail"><div class="empty2">Select a project to see its full dossier and backbone read.</div></div>
     </div>
   </div>
@@ -414,7 +408,7 @@ function towerHTML(L){
     const info=calloutInfo(k,L[k]);
     return `<div class="callout" data-ci="${ci}"><span class="cdot ${info.dot}"></span>
       <div><div class="cname">${info.name}</div><div class="ctech">${info.tech}</div>
-      ${info.load?'<span class="lb">Load-bearing</span>':''}</div></div>`;
+      ${info.load?`<span class="lb ${L[k]==='rocketride'?'on':'off'}">Load-bearing</span>`:''}</div></div>`;
   }).join('');
   return `<div class="scene"><div class="tower">${panes}</div><svg class="leaders"></svg>${callouts}</div>`;
 }
