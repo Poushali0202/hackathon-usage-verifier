@@ -3,7 +3,7 @@
 # Set the four ROCKETRIDE_* secrets in the Render dashboard (sync:false → never stored in git).
 services:
   - type: web
-    name: rocketride-usage-verifier
+    name: hackathon-judge-aid
     runtime: python
     plan: free                    # no monthly cost; spins down after ~15 min idle (first request then cold-starts ~30-60s)
     buildCommand: pip install -r app/requirements.txt
