@@ -5,7 +5,7 @@ services:
   - type: web
     name: rocketride-usage-verifier
     runtime: python
-    plan: starter                 # keeps the instance warm; bump for large batches / more memory
+    plan: free                    # no monthly cost; spins down after ~15 min idle (first request then cold-starts ~30-60s)
     buildCommand: pip install -r app/requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
