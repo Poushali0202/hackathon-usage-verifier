@@ -442,10 +442,23 @@ function layoutCallouts(scene){
 window.addEventListener('resize',()=>{ if(S.currentScene) layoutCallouts(S.currentScene); });
 
 // ---- download ----
-function showDownload(url,count){
-  if(!url) return;
-  const html=`<a class="btn gold" href="${esc(url)}">⬇ Download Excel (${count})</a>`;
+function showDownload(count){
+  if(!count) return;
+  const html=`<a class="btn gold" href="javascript:void(0)" onclick="exportExcel()">⬇ Download Excel (${count})</a>`;
   $('#dlSlot').innerHTML=html; $('#dlSlot2').innerHTML=html;
+}
+async function exportExcel(){
+  // Build the sheet from the results this browser already has — no server-side job to expire.
+  const results=S.order.map(i=>S.items[i]).filter(r=>r&&r._result);
+  if(!results.length) return;
+  try{
+    const resp=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({results})});
+    if(!resp.ok) throw new Error(await resp.text());
+    const blob=await resp.blob(), url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='RocketRide_Hackathon_Usage.xlsx';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+  }catch(e){ alert('Export failed: '+e.message); }
 }
 
 // ---- NDJSON stream ----
@@ -469,7 +482,7 @@ function handle(m){
     renderCard(m.index, r); recount();
     if(S.sel==null) select(m.index);
   }
-  else if(m.event==='done'){ stopTimer(); showDownload(m.download, m.count); recount(); }
+  else if(m.event==='done'){ stopTimer(); showDownload(m.count); recount(); }
 }
 
 function resetRun(){

@@ -15,11 +15,12 @@ import tempfile
 import uuid
 from collections import Counter
 from contextlib import asynccontextmanager
+from io import BytesIO
 from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -27,11 +28,10 @@ from pydantic import BaseModel
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-from .verifier_service import ClassifierPool, build_excel, verify_row  # noqa: E402
+from .verifier_service import ClassifierPool, verify_row  # noqa: E402
 import run_batch as rb  # noqa: E402  (project root is on sys.path via verifier_service)
 
 STATIC = Path(__file__).resolve().parent / "static"
-DOWNLOADS: dict[str, str] = {}          # job id -> xlsx path (ephemeral, per-process)
 pool = ClassifierPool()
 
 
@@ -110,8 +110,10 @@ def _summary(results: list) -> dict:
             "backbone": dict(Counter(r.get("backbone", "?") for r in results))}
 
 
-async def _run_stream(rows: list[dict], make_excel: bool):
-    """Shared NDJSON generator for live + batch: stage/result events, then a done event."""
+async def _run_stream(rows: list[dict]):
+    """Shared NDJSON generator for live + batch: stage/result events, then a done event.
+    The Excel is NOT built here — the browser builds it on demand via /api/export from the
+    results it already received, so a Render free-tier restart can't 'expire' a download."""
     results: list[dict] = []
     yield _ndjson({"event": "start", "total": len(rows)})
     for i, row in enumerate(rows, 1):
@@ -122,16 +124,7 @@ async def _run_stream(rows: list[dict], make_excel: bool):
                 results.append(payload)
                 yield _ndjson({"event": "result", "index": i, "total": len(rows),
                                "result": _public(payload)})
-    download = None
-    if make_excel and results:
-        rb.mark_duplicates(results)
-        job = uuid.uuid4().hex[:12]
-        out = Path(tempfile.gettempdir()) / f"rr_usage_{job}.xlsx"
-        build_excel(results, str(out))
-        DOWNLOADS[job] = str(out)
-        download = f"/api/download/{job}"
-    yield _ndjson({"event": "done", "count": len(results), "download": download,
-                   "summary": _summary(results)})
+    yield _ndjson({"event": "done", "count": len(results), "summary": _summary(results)})
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -143,8 +136,7 @@ async def index():
 async def verify_stream(req: VerifyRequest):
     rows = [{"project": r.project or "", "github": r.github, "feedback": r.feedback or "",
              "demo": r.demo or "", "deployed": r.deployed or ""} for r in req.repos]
-    return StreamingResponse(_run_stream(rows, make_excel=True),
-                             media_type="application/x-ndjson")
+    return StreamingResponse(_run_stream(rows), media_type="application/x-ndjson")
 
 
 @app.post("/api/batch")
@@ -158,18 +150,27 @@ async def batch(file: UploadFile = File(...)):
         raise HTTPException(400, f"Could not read submissions file: {e}")
     if not rows:
         raise HTTPException(400, "No rows found in the uploaded file.")
-    return StreamingResponse(_run_stream(rows, make_excel=True),
-                             media_type="application/x-ndjson")
+    return StreamingResponse(_run_stream(rows), media_type="application/x-ndjson")
 
 
-@app.get("/api/download/{job}")
-async def download(job: str):
-    path = DOWNLOADS.get(job)
-    if not path or not Path(path).exists():
-        raise HTTPException(404, "Result expired or not found — re-run the verification.")
-    return FileResponse(
-        path, filename="RocketRide_Hackathon_Usage.xlsx",
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+class ExportRequest(BaseModel):
+    results: list[dict]
+
+
+@app.post("/api/export")
+async def export(req: ExportRequest):
+    """Build the styled Excel on demand from the results the browser already holds — stateless,
+    so it works regardless of instance restarts (there's no server-side job to expire)."""
+    results = req.results
+    if not results:
+        raise HTTPException(400, "No results to export.")
+    rb.mark_duplicates(results)
+    buf = BytesIO()
+    rb.write_sheet(results, buf)          # openpyxl writes the workbook into the in-memory buffer
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="RocketRide_Hackathon_Usage.xlsx"'})
 
 
 @app.get("/api/health")
