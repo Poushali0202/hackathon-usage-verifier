@@ -107,15 +107,19 @@ def load_rows(path: str) -> list:
         sys.exit("No rows found in the input file.")
     # Find the real header row: some exports put a banner/title row first (e.g. "LIVE TEAM RESULTS"),
     # so scan the first several rows for the one that actually resolves the required columns.
+    # We need a GitHub link plus SOME label — a project column, or failing that a team/name column.
     header_row, mapping, headers = 0, {}, [h.strip() for h in raw[0]]
     for i in range(min(8, len(raw))):
         hs = [str(h).strip() for h in raw[i]]
         m = _resolve_headers(hs)
-        if "github" in m and "project" in m:
+        if "github" in m and ("project" in m or "names" in m):
             header_row, mapping, headers = i, m, hs
             break
-    if "github" not in mapping or "project" not in mapping:
-        sys.exit(f"Could not find required columns. Detected: {mapping}\nHeaders: {headers}")
+    if "github" not in mapping or ("project" not in mapping and "names" not in mapping):
+        sys.exit("Could not find the required columns (need a GitHub link and a project or team name). "
+                 f"Detected: {mapping}\nHeaders: {headers}")
+    if "project" not in mapping:                 # no dedicated project column -> use the team/name column
+        mapping["project"] = mapping["names"]
     idx = {c: headers.index(h) for c, h in mapping.items()}
     rows = [
         {c: (cells[i].strip() if i < len(cells) else "") for c, i in idx.items()}
