@@ -105,14 +105,21 @@ def load_rows(path: str) -> list:
         sys.exit(f"Unsupported file type: {ext} (use .csv or .xlsx)")
     if not raw:
         sys.exit("No rows found in the input file.")
-    headers = [h.strip() for h in raw[0]]
-    mapping = _resolve_headers(headers)
+    # Find the real header row: some exports put a banner/title row first (e.g. "LIVE TEAM RESULTS"),
+    # so scan the first several rows for the one that actually resolves the required columns.
+    header_row, mapping, headers = 0, {}, [h.strip() for h in raw[0]]
+    for i in range(min(8, len(raw))):
+        hs = [str(h).strip() for h in raw[i]]
+        m = _resolve_headers(hs)
+        if "github" in m and "project" in m:
+            header_row, mapping, headers = i, m, hs
+            break
     if "github" not in mapping or "project" not in mapping:
         sys.exit(f"Could not find required columns. Detected: {mapping}\nHeaders: {headers}")
     idx = {c: headers.index(h) for c, h in mapping.items()}
     rows = [
         {c: (cells[i].strip() if i < len(cells) else "") for c, i in idx.items()}
-        for cells in raw[1:]
+        for cells in raw[header_row + 1:]
     ]
     for row in rows:  # a malformed multi-line cell can bleed following text into the title
         if "\n" in row.get("project", ""):
