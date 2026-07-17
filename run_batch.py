@@ -82,6 +82,70 @@ def _resolve_headers(headers: list) -> dict:
     return mapping
 
 
+_GH_CELL = re.compile(r"github\.com[/:]+[^/\s]+/[^/\s#?]+", re.I)
+_EMAIL_CELL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+_LABEL_HINTS = ("name", "team", "project", "title", "group", "submission")
+
+
+def _resolve_columns(headers: list, data: list) -> dict:
+    """Map canonical field -> COLUMN INDEX, using header aliases first, then cell content as a
+    backstop so header wording doesn't matter:
+      • github  = the column with the most github.com URLs in the sampled data
+      • project = a plain-text column (not a URL / email / number), preferring name/team-hinted headers
+    Returns {} if it can't find a github + label pair."""
+    ncol = len(headers)
+    normed = [_norm(h) for h in headers]
+    used, idx = set(), {}
+
+    def claim(canon, pred):
+        for j in range(ncol):
+            if j not in used and pred(j):
+                idx[canon] = j
+                used.add(j)
+                return
+
+    for canon, aliases in FIELD_ALIASES.items():                      # pass 1: exact header alias
+        claim(canon, lambda j, al=aliases: normed[j] in al)
+    for canon, aliases in FIELD_ALIASES.items():                      # pass 2: substring (>=5 chars)
+        if canon not in idx:
+            longs = [a for a in aliases if len(a) >= 5]
+            claim(canon, lambda j, al=longs: any(a in normed[j] for a in al))
+
+    if "github" not in idx:                                           # content: repo column = most github URLs
+        hits = [sum(1 for r in data if j < len(r) and _GH_CELL.search(str(r[j] or "")))
+                for j in range(ncol)]
+        if any(hits):
+            j = max(range(ncol), key=lambda k: hits[k])
+            if j not in used:
+                idx["github"] = j
+                used.add(j)
+
+    if "project" not in idx and "names" not in idx:                  # content: label = a plain-text column
+        cand = []
+        for j in range(ncol):
+            if j in used:
+                continue
+            vals = [str(r[j]).strip() for r in data if j < len(r) and str(r[j]).strip()][:8]
+            if not vals:
+                continue
+            if any(_GH_CELL.search(v) or v.lower().startswith("http") for v in vals):
+                continue
+            if any(_EMAIL_CELL.search(v) for v in vals):
+                continue
+            if all(re.sub(r"[.\-\s,%$]", "", v).isdigit() for v in vals):
+                continue
+            hinted = any(h in normed[j] for h in _LABEL_HINTS)
+            cand.append((0 if hinted else 1, j))                     # hinted columns first
+        if cand:
+            cand.sort()
+            idx["project"] = cand[0][1]
+            used.add(cand[0][1])
+
+    if "project" not in idx and "names" in idx:                      # team/name column doubles as the label
+        idx["project"] = idx["names"]
+    return idx
+
+
 def load_rows(path: str) -> list:
     p = Path(path)
     ext = p.suffix.lower()
@@ -105,22 +169,22 @@ def load_rows(path: str) -> list:
         sys.exit(f"Unsupported file type: {ext} (use .csv or .xlsx)")
     if not raw:
         sys.exit("No rows found in the input file.")
-    # Find the real header row: some exports put a banner/title row first (e.g. "LIVE TEAM RESULTS"),
-    # so scan the first several rows for the one that actually resolves the required columns.
-    # We need a GitHub link plus SOME label — a project column, or failing that a team/name column.
-    header_row, mapping, headers = 0, {}, [h.strip() for h in raw[0]]
-    for i in range(min(8, len(raw))):
-        hs = [str(h).strip() for h in raw[i]]
-        m = _resolve_headers(hs)
-        if "github" in m and ("project" in m or "names" in m):
-            header_row, mapping, headers = i, m, hs
+    # Locate the header row (skipping banner/title rows) and map columns by header aliases AND cell
+    # content — the column full of github.com URLs is the repo column whatever its header says, and a
+    # plain-text column becomes the label. Handles varied/ambiguous sheets with no per-format tweaks.
+    width = max((len(r) for r in raw), default=0)
+    header_row, idx = None, {}
+    for hr in range(min(8, len(raw))):
+        if sum(1 for c in raw[hr] if str(c).strip()) < max(2, (width + 1) // 2):
+            continue                              # too few filled cells -> a banner/title row, skip it
+        m = _resolve_columns([str(h).strip() for h in raw[hr]], raw[hr + 1:hr + 31])
+        if "github" in m and "project" in m:
+            header_row, idx = hr, m
             break
-    if "github" not in mapping or ("project" not in mapping and "names" not in mapping):
-        sys.exit("Could not find the required columns (need a GitHub link and a project or team name). "
-                 f"Detected: {mapping}\nHeaders: {headers}")
-    if "project" not in mapping:                 # no dedicated project column -> use the team/name column
-        mapping["project"] = mapping["names"]
-    idx = {c: headers.index(h) for c, h in mapping.items()}
+    if header_row is None:
+        seen = [str(h).strip() for h in raw[0] if str(h).strip()]
+        sys.exit("Could not find a GitHub-link column and a project/team label in this file.\n"
+                 f"Headers seen: {seen}")
     rows = [
         {c: (cells[i].strip() if i < len(cells) else "") for c, i in idx.items()}
         for cells in raw[header_row + 1:]
