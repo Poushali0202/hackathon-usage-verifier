@@ -120,12 +120,14 @@ class ClassifierPool:
                         await self._connect_locked()
                         client, token = self._client, self._token
                     q = Question()
+                    # On retries, re-send the FULL prompt (evidence included) + a JSON-only nudge —
+                    # a bare "re-emit" reprompt can't recover if the first attempt timed out.
                     q.addQuestion(
                         prompt if attempt == 0 else
-                        "Your previous reply was not valid JSON. Re-emit ONLY the strict JSON "
-                        "object for that project — start with { and end with }, no prose."
+                        prompt + "\n\nREMINDER: reply with ONLY the strict JSON object — "
+                        "start with { and end with }, no prose."
                     )
-                    resp = await asyncio.wait_for(client.chat(token=token, question=q), timeout=60)
+                    resp = await asyncio.wait_for(client.chat(token=token, question=q), timeout=90)
                 except asyncio.TimeoutError:
                     continue                       # classifier hung — retry
                 except Exception:

@@ -325,7 +325,7 @@ function renderCard(i, r){
   c.dataset.group=groupOf(r);
   if(rev){
     c.innerHTML=`<div class="top"><div class="nm">${esc(r.project)||'(unnamed)'}</div></div>
-      <div class="reviewtxt">⚠ inaccessible — needs review</div>
+      <div class="reviewtxt">⚠ ${(r.repo_accessible===true&&r.classify_failed)?'classification failed — re-run':'inaccessible — needs review'}</div>
       <div class="meta"><span class="bb">Backbone ${esc(r.backbone||'No')}</span>${flagsHTML(r)}</div>`;
   } else {
     c.innerHTML=`<div class="top">${glyphHTML(r.layers)}
@@ -377,8 +377,9 @@ function renderDetail(r, digest){
       ${linkBtn(r.demo,'Demo / Video','No demo')}
       ${linkBtn(r.deployed,'Deployed','Not deployed')}
     </div></div>
-    ${rev?`<div class="dsec"><p class="muted">This repository could not be accessed, so RocketRide usage
-        could not be verified from code. Flagged for correction; scored as zero. ${esc(r.notes||'')}</p></div>`:`
+    ${rev?`<div class="dsec"><p class="muted">${(r.repo_accessible===true&&r.classify_failed)
+        ?'The repository was read fine, but the classifier did not return a usable result on this run — usually a transient timeout on a very large repo. Re-run this row and it should classify.'
+        :'This repository could not be accessed, so RocketRide usage could not be verified from code. Flagged for correction; scored as zero.'} ${esc(r.notes||'')}</p></div>`:`
     ${r.description?`<div class="dsec"><div class="eyebrow">Project description</div><p>${esc(r.description)}</p></div>`:''}
     ${r.rocketride_usage?`<div class="dsec"><div class="eyebrow">How RocketRide was used &amp; how it helped</div><p>${esc(r.rocketride_usage)}</p></div>`:''}
     <div class="dsec"><div class="readhead"><div class="eyebrow">Backbone read</div>
