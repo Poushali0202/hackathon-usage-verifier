@@ -177,6 +177,34 @@
   .key .k-rr{background:linear-gradient(135deg,var(--teal1),var(--teal2))}
   .key .k-off{background:rgba(255,255,255,.14)}
 
+  /* ---- responsive: tablet ---- */
+  @media (max-width:900px){
+    .appbar{gap:10px;padding:10px 14px;flex-wrap:wrap}
+    .appbar .spacer{display:none}
+    .progress{width:100%;order:3;font-size:11px;gap:8px}
+    .pbar{flex:1;width:auto}
+    .inputs{padding:10px 14px}
+    .ipanel{padding:14px}
+    .wsscroll{overflow-x:visible;padding:8px 14px 40px}
+    .workspace{min-width:0;grid-template-columns:1fr;gap:14px}      /* stack: grid, then detail */
+    .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));max-height:none;overflow:visible}
+    .detail{position:static;max-height:none;overflow:visible;padding:16px}
+  }
+  /* ---- responsive: phone ---- */
+  @media (max-width:620px){
+    .brand{font-size:14px}
+    .grid{grid-template-columns:1fr 1fr}
+    .gridbar{gap:8px}
+    .count{font-size:11px;padding:3px 8px}
+    .fbtn{font-size:11px;padding:4px 10px}
+    .detail h2{font-size:17px}
+    /* backbone tower: shrink it, stack the callouts under it, drop the leader lines */
+    .scene{height:auto;padding-top:215px;margin-top:0}
+    .tower{left:50%;top:108px;transform:translate(-50%,-50%) rotateX(56deg) rotateZ(-42deg) scale(.8)}
+    .leaders{display:none}
+    .callout{position:static;width:100%;margin-bottom:10px}
+  }
+
   @media (prefers-reduced-motion:reduce){.sk{animation:none} .card{transition:none}}
 </style>
 </head>
@@ -356,6 +384,8 @@ function select(i){
   document.getElementById('card-'+i)?.classList.add('sel');
   const r=S.items[i]; if(!r||!r._result) return;
   renderDetail(r, S.digests[i]);
+  // stacked layout: the detail sits below the grid, so bring it into view on tap
+  if(window.innerWidth<=900) $('#detail').scrollIntoView({behavior:'smooth', block:'start'});
 }
 function linkBtn(url,label,offLabel){
   return url ? `<a class="lbtn" href="${esc(url)}" target="_blank" rel="noopener">${label}</a>`
@@ -418,6 +448,11 @@ function towerHTML(L){
 function layoutCallouts(scene){
   if(!scene) return;
   const svg=scene.querySelector('.leaders'); if(!svg) return;
+  if(window.innerWidth<=620){        // phone: callouts stack in normal flow, no leader lines
+    svg.innerHTML='';
+    scene.querySelectorAll('.callout').forEach(el=>{ el.style.left=''; el.style.top=''; });
+    return;
+  }
   const sr=scene.getBoundingClientRect(), W=sr.width, H=sr.height;
   const calloutX=W-128, pad=14, span=H-pad*2;
   svg.innerHTML='';
