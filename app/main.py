@@ -10,6 +10,7 @@ Run locally (from the project folder):
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import tempfile
 import uuid
@@ -32,7 +33,8 @@ from .verifier_service import ClassifierPool, verify_row  # noqa: E402
 import run_batch as rb  # noqa: E402  (project root is on sys.path via verifier_service)
 
 STATIC = Path(__file__).resolve().parent / "static"
-pool = ClassifierPool()
+BATCH_CONCURRENCY = 4                    # how many repos to verify at once
+pool = ClassifierPool(max_concurrency=BATCH_CONCURRENCY)
 
 
 @asynccontextmanager
@@ -110,20 +112,41 @@ def _summary(results: list) -> dict:
             "backbone": dict(Counter(r.get("backbone", "?") for r in results))}
 
 
-async def _run_stream(rows: list[dict]):
-    """Shared NDJSON generator for live + batch: stage/result events, then a done event.
-    The Excel is NOT built here — the browser builds it on demand via /api/export from the
-    results it already received, so a Render free-tier restart can't 'expire' a download."""
+async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY):
+    """Shared NDJSON generator for live + batch. Repos are verified CONCURRENTLY (up to
+    `concurrency` at a time); each verify_row's stage/result events are merged into one output
+    stream via a queue, so a large batch finishes ~concurrency-times faster than one-at-a-time.
+    The Excel is NOT built here — the browser builds it on demand via /api/export."""
+    total = len(rows)
+    yield _ndjson({"event": "start", "total": total})
     results: list[dict] = []
-    yield _ndjson({"event": "start", "total": len(rows)})
-    for i, row in enumerate(rows, 1):
-        async for kind, payload in verify_row(row, pool):
-            if kind == "stage":
-                yield _ndjson({"event": "stage", "index": i, **payload})
-            else:
-                results.append(payload)
-                yield _ndjson({"event": "result", "index": i, "total": len(rows),
-                               "result": _public(payload)})
+    q: asyncio.Queue = asyncio.Queue()
+    sem = asyncio.Semaphore(max(1, concurrency))
+
+    async def worker(i: int, row: dict):
+        try:
+            async with sem:
+                async for kind, payload in verify_row(row, pool):
+                    await q.put((kind, i, payload))
+        except Exception as e:  # noqa: BLE001 — surface a failed row rather than hang the batch
+            await q.put(("result", i, {**row, "repo_accessible": True, "classify_failed": True,
+                         "tag": "None", "backbone": "No", "description": "", "rocketride_usage": "",
+                         "notes": f"worker error: {e}", "evidence": [], "seconds": 0.0}))
+        finally:
+            await q.put(("__endrow__", i, None))
+
+    tasks = [asyncio.create_task(worker(i, row)) for i, row in enumerate(rows, 1)]
+    remaining = total
+    while remaining:
+        kind, i, payload = await q.get()
+        if kind == "__endrow__":
+            remaining -= 1
+        elif kind == "stage":
+            yield _ndjson({"event": "stage", "index": i, **payload})
+        else:
+            results.append(payload)
+            yield _ndjson({"event": "result", "index": i, "total": total, "result": _public(payload)})
+    await asyncio.gather(*tasks, return_exceptions=True)
     yield _ndjson({"event": "done", "count": len(results), "summary": _summary(results)})
 
 
