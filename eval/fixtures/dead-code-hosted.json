@@ -1,0 +1,19 @@
+{
+  "name": "dead-code + phantom hosted — None must force backbone No (the MCP AttackGraph bug)",
+  "evidence": {
+    "accessible": true,
+    "dependency": false,
+    "scaffold_only": false,
+    "other_platforms": ["butterbase"],
+    "sdk": {"callsites": 1, "file_spread": 1, "hosted": true, "engine": false},
+    "pipes": [
+      {
+        "path": "hello.pipe",
+        "metrics": {"nodes": 0, "providers": [], "has_agent": false, "has_llm": false, "tool_count": 0, "project_id": ""},
+        "called": false,
+        "call_sites": []
+      }
+    ]
+  },
+  "expect": {"tag": "None", "backbone": "No", "score": 0.0}
+}

@@ -84,7 +84,10 @@ def sdk_metrics(source_files: list) -> dict:
         callsites += n
         if n or "from rocketride" in low or "import rocketride" in low or "@rocketride" in low:
             files_using += 1
-        if "rocketride_pipeline" in low or "rocketride_api_key" in low or "lib/rocketride" in low:
+        # hosted-pipeline usage = a pipeline called by id via the API + an adapter. A bare
+        # ROCKETRIDE_API_KEY is only authentication (present even for local-pipe projects like
+        # constructor) — it is NOT hosted-pipeline usage, so it must not score on its own.
+        if "rocketride_pipeline" in low or "lib/rocketride" in low:
             hosted = True
         if "ws://localhost:5565" in low or "/v1/pipelines" in low:
             engine = True
@@ -174,6 +177,10 @@ def evaluate(evidence: dict) -> dict:
     score = max(0.0, round(score, 1))
     backbone = _backbone(pipelines, sdk, evidence)
     tag = _tag(score, backbone, called, evidence)
+    # couple backbone to the verdict: a project with no real usage (None/Less) can't be the backbone
+    # of anything, so it never shows Yes/Partial. This makes contradictions like "None + Yes" impossible.
+    if tag in ("None", "Less"):
+        backbone = "No"
     return {"tag": tag, "backbone": backbone, "score": score, "pipelines": pipelines, "sdk": sdk,
             "breakdown": breakdown, "pipelines_called": called,
             "pipelines_total": len(pipelines), "other_platforms": evidence.get("other_platforms", [])}

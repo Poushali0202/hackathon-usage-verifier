@@ -31,7 +31,7 @@ floored at 0.
 | C1 | **dependency in a manifest** (`rocketride` in package.json / requirements) | yes | **+1.0** |
 | C2 | **≥3 SDK call-sites** (`RocketRideClient`, `client.use/chat/send/connect`) | 8 | **+0.5** |
 | C3 | **≥2 files use RocketRide** (spread, not adapter-only) | 2 | **+0.5** |
-| C4 | **hosted / Cloud usage** (hosted-pipeline id/env, `ROCKETRIDE_API_KEY`, adapter) | yes | **+1.0** |
+| C4 | **hosted-pipeline usage** (`ROCKETRIDE_PIPELINE_*` id/env, or a `lib/rocketride` adapter — a bare `ROCKETRIDE_API_KEY` is only auth and does NOT count) | yes | **+1.0** |
 
 ## D. Disqualifiers / caps
 | # | Rule | Effect |
@@ -56,6 +56,8 @@ floored at 0.
   Pinecone does **not** demote.)
 - **Partial** — the above holds but a **competing AI runtime** (`langchain`, `crewai`) is also present.
 - **No** — no called pipeline and no hosted/engine usage.
+- **Coupled to the verdict:** if the Tag is **None or Less** (no real usage), backbone is forced to
+  **No** — a project that barely uses RocketRide cannot be its backbone. So **None + Yes is impossible**.
 
 ---
 
@@ -63,6 +65,7 @@ floored at 0.
 | Repo shape | Score | → |
 |---|---|---|
 | **constructor** (dep + 1 called agent-pipeline, 7 nodes, spread 2, 8 call-sites, hosted) | **7.0** | **Significant / Yes** |
+| **dead-code + phantom hosted** (empty `.pipe`, never called; None must force backbone No) | **0.0** | **None / No** |
 | **for-show** (dep + a `.pipe` that is never called) | **0.0** | **None** (penalised) |
 | **scaffold-only** (`.claude/rules` only) | 0.0 | **Less** (capped) |
 | **hosted-only** (Cloud usage, no local `.pipe`) | 3.0 | **Moderate / Yes** |
