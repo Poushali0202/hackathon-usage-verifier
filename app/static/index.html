@@ -60,7 +60,7 @@
   .count{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.08)}
   .count b{color:var(--ink)}
   .count .sw{width:8px;height:8px;border-radius:50%}
-  .sw.yes{background:var(--green1)} .sw.part{background:var(--teal1)} .sw.no{background:rgba(255,255,255,.35)} .sw.rev{background:var(--review)}
+  .sw.sig{background:var(--green1)} .sw.mod{background:#fbbf24} .sw.less{background:rgba(255,255,255,.35)} .sw.none{background:#f2a08f} .sw.rev{background:var(--review)}
   .filters{display:flex;gap:6px;flex-wrap:wrap}
   .fbtn{font-size:12px;padding:5px 12px;border-radius:18px;border:1px solid rgba(255,255,255,.1);background:transparent;color:var(--muted);cursor:pointer;font-weight:600}
   .fbtn.on{color:var(--ink2);border-color:var(--cyan);background:rgba(127,227,208,.10)}
@@ -264,16 +264,19 @@
       <div class="gridcol">
         <div class="gridbar">
           <div class="counts">
-            <span class="count"><span class="sw yes"></span> Backbone Yes <b id="cYes">0</b></span>
-            <span class="count"><span class="sw part"></span> Partial <b id="cPart">0</b></span>
-            <span class="count"><span class="sw no"></span> No <b id="cNo">0</b></span>
+            <span class="count"><span class="sw sig"></span> Significant <b id="cSig">0</b></span>
+            <span class="count"><span class="sw mod"></span> Moderate <b id="cMod">0</b></span>
+            <span class="count"><span class="sw less"></span> Less <b id="cLess">0</b></span>
+            <span class="count"><span class="sw none"></span> None <b id="cNone">0</b></span>
             <span class="count"><span class="sw rev"></span> Needs review <b id="cRev">0</b></span>
           </div>
           <div class="spacer"></div>
           <div class="filters" id="filters">
             <button class="fbtn on" data-f="all">All</button>
-            <button class="fbtn" data-f="yes">Backbone Yes</button>
-            <button class="fbtn" data-f="part">Partial</button>
+            <button class="fbtn" data-f="sig">Significant</button>
+            <button class="fbtn" data-f="mod">Moderate</button>
+            <button class="fbtn" data-f="less">Less</button>
+            <button class="fbtn" data-f="none">None</button>
             <button class="fbtn" data-f="review">Needs review</button>
           </div>
         </div>
@@ -311,8 +314,8 @@ function normLayers(L){
 const S={items:{}, digests:{}, order:[], sel:null, total:0, done:0, filter:'all', t0:null, timer:null, currentScene:null};
 
 function isReview(r){ return r.repo_accessible!==true || r.classify_failed===true; }
-function groupOf(r){ if(isReview(r)) return 'review'; const b=(r.backbone||'').toLowerCase();
-  return b==='yes'?'yes':b==='partial'?'part':'no'; }
+function groupOf(r){ if(isReview(r)) return 'review'; const t=(r.tag||'').toLowerCase();
+  return t==='significant'?'sig':t==='moderate'?'mod':t==='less'?'less':'none'; }
 
 // ---- tabs ----
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
@@ -343,10 +346,12 @@ function stopTimer(){ clearInterval(S.timer); }
 
 // ---- counts ----
 function recount(){
-  let y=0,p=0,n=0,rv=0;
+  let sig=0,mod=0,less=0,none=0,rv=0;
   for(const i of S.order){ const r=S.items[i]; if(!r||!r._result) continue;
-    const g=groupOf(r); if(g==='review')rv++; else if(g==='yes')y++; else if(g==='part')p++; else n++; }
-  $('#cYes').textContent=y; $('#cPart').textContent=p; $('#cNo').textContent=n; $('#cRev').textContent=rv;
+    const g=groupOf(r);
+    if(g==='review')rv++; else if(g==='sig')sig++; else if(g==='mod')mod++; else if(g==='less')less++; else none++; }
+  $('#cSig').textContent=sig; $('#cMod').textContent=mod; $('#cLess').textContent=less;
+  $('#cNone').textContent=none; $('#cRev').textContent=rv;
   $('#pDone').textContent=S.done; $('#pTotal').textContent=S.total;
   $('#pBar').style.width=(S.total?100*S.done/S.total:0)+'%';
 }
