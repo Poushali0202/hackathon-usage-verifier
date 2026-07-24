@@ -33,6 +33,9 @@ from openpyxl.utils import get_column_letter
 from rocketride import RocketRideClient
 from rocketride.schema import Question
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "eval"))
+import engine  # noqa: E402  DETERMINISTIC evaluator, shared with the web app (verdict parity)
+
 PIPELINE_FILE = "verify_usage.pipe"
 NEEDS_REVIEW = "needs_review.csv"
 GH_TOKEN = None  # set in main()
@@ -352,6 +355,9 @@ def fetch_signals(url: str) -> dict:
     }
 
 
+# LEGACY — the semantic LLM rubric that used to DECIDE the verdict. No longer used: the tag/backbone
+# are now computed deterministically in eval/engine.py, and the LLM only writes prose. Kept for
+# reference / rollback; safe to delete once the deterministic path has run a live event.
 RUBRIC = (
     "You are a RocketRide hackathon usage verifier. Decide how a project used RocketRide "
     "using ONLY the code evidence provided below (already gathered from GitHub). Do not ask "
@@ -421,84 +427,84 @@ RUBRIC = (
 # ---- pipeline driving --------------------------------------------------------
 
 async def verify_one(client, token, row, sem) -> dict:
+    """Verify one row with the DETERMINISTIC engine (same verdict as the web app), then use the cloud
+    pipeline only to write the plain-English explanation. The verdict never depends on the LLM."""
     project = row.get("project", "")
     url = row.get("github", "")
     feedback = row.get("feedback", "")
     started = time.perf_counter()
 
     if repo_missing(url):
-        return {**row, "repo_accessible": False, "description": "", "rocketride_usage": "",
-                "tag": "None", "backbone": "No",
+        return {**row, **engine.ZERO_EVAL, "repo_accessible": False, "description": "",
+                "rocketride_usage": "", "tag": "None", "backbone": "No", "classify_failed": False,
                 "notes": "No GitHub repo provided — flag for correction; scored as ZERO",
                 "justification": "No GitHub repository was provided in the submission, so RocketRide "
                 "usage cannot be verified from code — classified None / No and flagged for "
                 "correction (score zero).",
                 "evidence": [], "seconds": 0.0}
 
-    # Python gathers the evidence off the event loop (keeps the websocket alive)
-    sig = await asyncio.to_thread(fetch_signals, url)
-    if not sig.get("accessible"):
-        return {**row, "repo_accessible": False, "description": "", "rocketride_usage": "",
-                "tag": "None", "backbone": "No",
-                "notes": f"INACCESSIBLE (HTTP {sig.get('status', '?')}) — flag for correction: "
+    # Python gathers evidence + measures pipelines deterministically (off the event loop)
+    evidence = await asyncio.to_thread(engine.gather, url, _gh)
+    if not evidence.get("accessible"):
+        return {**row, **engine.ZERO_EVAL, "repo_accessible": False, "description": "",
+                "rocketride_usage": "", "tag": "None", "backbone": "No", "classify_failed": False,
+                "notes": f"INACCESSIBLE (HTTP {evidence.get('status', '?')}) — flag for correction: "
                          "double-check the repo URL; scored as ZERO",
                 "justification": f"The repository could not be accessed (HTTP "
-                f"{sig.get('status', '?')}), so RocketRide usage cannot be verified from code — "
+                f"{evidence.get('status', '?')}), so RocketRide usage cannot be verified from code — "
                 "classified None / No and flagged for correction (score zero).",
                 "evidence": [], "seconds": round(time.perf_counter() - started, 1)}
 
-    if sig.get("fetch_incomplete"):
-        return {**row, "repo_accessible": None, "description": "", "rocketride_usage": "",
-                "tag": "None", "backbone": "No",
-                "notes": f"Evidence fetch incomplete ({sig.get('note', '')}) — resubmit this row",
+    if evidence.get("fetch_incomplete"):
+        return {**row, **engine.ZERO_EVAL, "repo_accessible": None, "description": "",
+                "rocketride_usage": "", "tag": "None", "backbone": "No", "classify_failed": False,
+                "notes": f"Evidence fetch incomplete ({evidence.get('note', '')}) — resubmit this row",
                 "justification": "Evidence gathering was incomplete this run, so classification was "
                 "deferred — resubmit this row.",
                 "evidence": [], "seconds": round(time.perf_counter() - started, 1)}
 
-    prompt = (
-        RUBRIC
-        + f"\n\nPROJECT: {project}\nREPO: {url}\n"
-        + f"TEAM FEEDBACK (may over/under-claim — trust the evidence over this): "
-        + f"{feedback or '(none provided)'}\n\nCODE EVIDENCE (gathered from GitHub):\n"
-        + json.dumps(sig, indent=2)
-    )
+    # DETERMINISTIC verdict — identical to the web app; no LLM decides the tag
+    ev = engine.evaluate(evidence)
 
+    # cloud pipeline writes ONLY the prose explanation (verdict is already fixed)
+    prompt = engine.explain_prompt(ev, project, url, feedback)
+    prose: dict = {}
     async with sem:
-        parsed = {}
         for attempt in range(3):
             if attempt:
                 await asyncio.sleep(1.0 * attempt)  # let classifier contention clear before retry
             q = Question()
-            q.addQuestion(
-                prompt if attempt == 0 else
-                "Your previous reply was not valid JSON. Re-emit ONLY the strict JSON object "
-                "for that project — start with { and end with }, no prose."
-            )
+            q.addQuestion(prompt if attempt == 0 else
+                          prompt + "\n\nREMINDER: reply with ONLY the strict JSON object.")
             try:
-                resp = await asyncio.wait_for(client.chat(token=token, question=q), timeout=60)
+                resp = await asyncio.wait_for(client.chat(token=token, question=q), timeout=90)
             except asyncio.TimeoutError:
-                continue  # classifier hung on this call — retry, then flag if it never answers
-            except Exception as e:  # noqa: BLE001
-                return {**row, "repo_accessible": True, "classify_failed": True,
-                        "tag": "None", "backbone": "No",
-                        "notes": f"pipeline error: {e} — resubmit this row", "evidence": [],
-                        "description": "", "rocketride_usage": "",
-                        "seconds": round(time.perf_counter() - started, 1)}
+                continue                               # classifier hung — retry
+            except Exception:  # noqa: BLE001 — keep the deterministic verdict, skip the prose
+                break
             answers = resp.get("answers", []) if isinstance(resp, dict) else []
-            parsed = extract_json(answers[0] if answers else "")
-            if parsed:
+            prose = engine.extract_prose(answers[0] if answers else "")
+            if prose:
                 break
 
     elapsed = round(time.perf_counter() - started, 1)
-    if not parsed:
-        return {**row, "repo_accessible": True, "classify_failed": True,
-                "tag": "None", "backbone": "No",
-                "notes": "classifier returned no parseable JSON — resubmit this row",
-                "evidence": [f"pipe_files={sig.get('pipe_files')}",
-                             f"deps={sig.get('rocketride_dependencies')}"],
-                "description": "", "rocketride_usage": "", "seconds": elapsed}
-    parsed.setdefault("evidence", [])
-    return {**row, **parsed, "seconds": elapsed}
+    note = engine.det_note(ev)
+    explain_failed = not prose
+    return {
+        **row, "repo_accessible": True, "classify_failed": False,   # the verdict never fails now
+        "tag": ev["tag"], "backbone": ev["backbone"], "score": ev["score"],
+        "pipelines": ev["pipelines"], "breakdown": ev["breakdown"],
+        "pipelines_called": ev["pipelines_called"], "pipelines_total": ev["pipelines_total"],
+        "other_platforms": ev["other_platforms"], "explain_failed": explain_failed,
+        "description": prose.get("description", ""),
+        "rocketride_usage": prose.get("rocketride_usage", ""),
+        "justification": (prose.get("justification", "") if not explain_failed
+                          else f"{note} (Plain-English explanation unavailable this run — the "
+                               "deterministic verdict stands; see the evidence table.)"),
+        "notes": note + (" [explanation pending — cloud classifier unreachable]" if explain_failed else ""),
+        "evidence": engine.evidence_lines(ev),
+        "seconds": elapsed,
+    }
 
 
 async def run(rows, concurrency: int) -> list:
@@ -558,20 +564,23 @@ HEADERS = [
     "RocketRide = Backbone?", "GitHub Link", "Additional Notes",
     "Why This Classification (Justification)",
     "Demo / Presentation / Video", "Deployed URL",
+    # deterministic evaluation columns (ground-truth tally)
+    "Score", "Pipelines (Called / Total)", "Pipeline Evidence (Ground Truth)",
 ]
 
 
 def row_values(r: dict) -> list:
     team = " / ".join(x for x in [r.get("names", ""), r.get("emails", "")] if x)
-    notes = r.get("notes", "")
-    evidence = r.get("evidence") or []
-    if evidence:
-        notes = (notes + " | evidence: " + "; ".join(map(str, evidence))).strip(" |")
+    pc, pt = r.get("pipelines_called"), r.get("pipelines_total")
+    called = f"{pc} / {pt}" if pt is not None else ""
+    score = r.get("score")
+    evidence = "\n".join(map(str, r.get("evidence") or []))   # ground-truth: pipelines + call sites
     return [
         r.get("project", ""), team, r.get("description", ""), r.get("rocketride_usage", ""),
-        r.get("tag", ""), r.get("backbone", ""), r.get("github", ""), notes,
+        r.get("tag", ""), r.get("backbone", ""), r.get("github", ""), r.get("notes", ""),
         r.get("justification", ""),
         r.get("demo", ""), r.get("deployed", ""),
+        ("" if score is None else score), called, evidence,
     ]
 
 
@@ -596,8 +605,10 @@ def style_row(ws, row_i: int, r: dict) -> None:
         ws.cell(row=row_i, column=5).fill = PatternFill("solid", fgColor=TAG_FILL[tag])
     if bb in BACKBONE_FILL:
         ws.cell(row=row_i, column=6).fill = PatternFill("solid", fgColor=BACKBONE_FILL[bb])
-    for col in (1, 2, 3, 4, 8, 9):
+    for col in (1, 2, 3, 4, 8, 9, 14):        # 14 = Pipeline Evidence (multi-line table)
         ws.cell(row=row_i, column=col).alignment = WRAP
+    for col in (12, 13):                       # Score, Pipelines (Called/Total) — centered
+        ws.cell(row=row_i, column=col).alignment = Alignment(horizontal="center", vertical="top")
     for col in (7, 10, 11):  # GitHub Link, Demo/Presentation, Deployed URL — clickable
         _link_cell(ws, row_i, col)
 
@@ -615,7 +626,7 @@ def write_sheet(results: list, out_path: str) -> None:
     for r in results:
         ws.append(row_values(r))
         style_row(ws, ws.max_row, r)
-    for i, w in enumerate([22, 30, 34, 50, 14, 14, 40, 40, 55, 38, 30], 1):
+    for i, w in enumerate([22, 30, 34, 50, 14, 14, 40, 40, 55, 38, 30, 8, 16, 60], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = f"A1:{get_column_letter(len(HEADERS))}{ws.max_row}"

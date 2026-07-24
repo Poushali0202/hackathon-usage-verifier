@@ -1,0 +1,23 @@
+{
+  "name": "for-show — a .pipe is present but NEVER called in code",
+  "evidence": {
+    "accessible": true,
+    "dependency": true,
+    "scaffold_only": false,
+    "other_platforms": [],
+    "sdk": {"callsites": 0, "file_spread": 0, "hosted": false, "engine": false},
+    "pipes": [
+      {
+        "path": "demo.pipe",
+        "metrics": {
+          "nodes": 6,
+          "providers": ["chat", "prompt", "agent_rocketride", "llm_anthropic", "tool_http_request", "response_answers"],
+          "has_agent": true, "has_llm": true, "tool_count": 1, "project_id": ""
+        },
+        "called": false,
+        "call_sites": []
+      }
+    ]
+  },
+  "expect": {"tag": "None", "backbone": "No", "score": 0.0}
+}

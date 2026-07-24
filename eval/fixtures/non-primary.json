@@ -1,0 +1,25 @@
+{
+  "name": "non-primary — a called agent pipeline, but langchain is also present",
+  "evidence": {
+    "accessible": true,
+    "dependency": true,
+    "scaffold_only": false,
+    "other_platforms": ["langchain"],
+    "sdk": {"callsites": 4, "file_spread": 2, "hosted": false, "engine": false},
+    "pipes": [
+      {
+        "path": "flow.pipe",
+        "metrics": {
+          "nodes": 6,
+          "providers": ["chat", "prompt", "agent_rocketride", "llm_anthropic", "tool_http_request", "response_answers"],
+          "has_agent": true, "has_llm": true, "tool_count": 1, "project_id": ""
+        },
+        "called": true,
+        "call_sites": [
+          {"file": "src/agent.py", "line": 40, "snippet": "token = client.use(filepath='flow.pipe')"}
+        ]
+      }
+    ]
+  },
+  "expect": {"tag": "Significant", "backbone": "Partial", "score": 6.0}
+}

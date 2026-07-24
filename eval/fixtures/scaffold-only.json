@@ -1,0 +1,12 @@
+{
+  "name": "scaffold-only — .claude/rules present, no dependency / pipe / call",
+  "evidence": {
+    "accessible": true,
+    "dependency": false,
+    "scaffold_only": true,
+    "other_platforms": [],
+    "sdk": {"callsites": 0, "file_spread": 0, "hosted": false, "engine": false},
+    "pipes": []
+  },
+  "expect": {"tag": "Less", "backbone": "No", "score": 0.0}
+}

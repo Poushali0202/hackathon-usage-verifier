@@ -1,0 +1,12 @@
+{
+  "name": "hosted-only — Cloud pipeline driven via SDK, no local .pipe file",
+  "evidence": {
+    "accessible": true,
+    "dependency": true,
+    "scaffold_only": false,
+    "other_platforms": [],
+    "sdk": {"callsites": 4, "file_spread": 2, "hosted": true, "engine": false},
+    "pipes": []
+  },
+  "expect": {"tag": "Moderate", "backbone": "Yes", "score": 3.0}
+}

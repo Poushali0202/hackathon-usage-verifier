@@ -1,0 +1,27 @@
+{
+  "name": "constructor — real repo (ramizik/constructor)",
+  "evidence": {
+    "accessible": true,
+    "dependency": true,
+    "scaffold_only": false,
+    "other_platforms": ["butterbase"],
+    "sdk": {"callsites": 8, "file_spread": 2, "hosted": true, "engine": false},
+    "pipes": [
+      {
+        "path": "constructor-pipeline.pipe",
+        "metrics": {
+          "nodes": 7,
+          "providers": ["webhook", "question", "agent_rocketride", "llm_minimax", "memory_internal", "tool_http_request", "response_answers"],
+          "has_agent": true, "has_llm": true, "tool_count": 1, "project_id": ""
+        },
+        "called": true,
+        "call_sites": [
+          {"file": "backend/src/rocketride/relay.ts", "line": 35, "snippet": "const pipeline = JSON.parse(readFileSync(join(repoRoot, \"constructor-pipeline.pipe\")))"},
+          {"file": "backend/src/rocketride/relay.ts", "line": 83, "snippet": "const result = await client.use({ pipeline, ttl: 0 });"},
+          {"file": "backend/src/rocketride/relay.ts", "line": 126, "snippet": "await client.send(token, JSON.stringify(parsed), {}, \"application/json\");"}
+        ]
+      }
+    ]
+  },
+  "expect": {"tag": "Significant", "backbone": "Yes", "score": 7.0}
+}

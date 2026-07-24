@@ -102,7 +102,10 @@ def _public(r: dict) -> dict:
     out = {k: r.get(k) for k in (
         "project", "github", "tag", "backbone", "description", "rocketride_usage",
         "justification", "notes", "evidence", "seconds", "demo", "deployed",
-        "names", "emails", "repo_accessible", "classify_failed")}
+        "names", "emails", "repo_accessible", "classify_failed",
+        # deterministic evaluation payload (ground-truth table + score)
+        "score", "pipelines", "breakdown", "pipelines_called", "pipelines_total",
+        "other_platforms", "explain_failed")}
     out["layers"] = _layers(r)
     return out
 
