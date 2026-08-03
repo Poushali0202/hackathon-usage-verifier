@@ -181,12 +181,13 @@ def load_rows(path: str) -> list:
         if sum(1 for c in raw[hr] if str(c).strip()) < max(2, (width + 1) // 2):
             continue                              # too few filled cells -> a banner/title row, skip it
         m = _resolve_columns([str(h).strip() for h in raw[hr]], raw[hr + 1:hr + 31])
-        if "github" in m and "project" in m:
-            header_row, idx = hr, m
+        if "github" in m:                         # a GitHub column is enough — the project/team label
+            header_row, idx = hr, m               # is optional and derived from the repo name when absent
             break
     if header_row is None:
         seen = [str(h).strip() for h in raw[0] if str(h).strip()]
-        sys.exit("Could not find a GitHub-link column and a project/team label in this file.\n"
+        sys.exit("Could not find a GitHub-link column in this file (need at least one column of "
+                 "GitHub repo URLs).\n"
                  f"Headers seen: {seen}")
     rows = [
         {c: (cells[i].strip() if i < len(cells) else "") for c, i in idx.items()}
