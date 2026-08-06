@@ -27,11 +27,29 @@ W = {
     "uncalled_penalty": 1.0,   # B2  per pipeline present but NEVER called
 }
 THRESHOLDS = {"significant": 4.0, "moderate": 2.0, "less": 1.0}
+_MAX_SCORED_PIPES = 6   # cap how many called pipelines score, so a big generated suite can't run away
 
 _SDK_CALL = re.compile(r"\b(RocketRideClient|client\.use|client\.chat|client\.send|client\.connect)", re.I)
-_MANIFEST = re.compile(r"(^|/)(package\.json|requirements\.txt|pyproject\.toml)$")
-_SRC_EXT = re.compile(r"\.(ts|tsx|js|jsx|py|mjs)$")
+_MANIFEST = re.compile(r"(^|/)(package\.json|requirements\.txt|pyproject\.toml|Cargo\.toml|go\.mod"
+                       r"|pom\.xml|build\.gradle(\.kts)?|Gemfile|composer\.json|[^/]+\.csproj)$", re.I)
+# scan beyond JS/Python — a pipeline can be called (or the SDK used) from any language
+_SRC_EXT = re.compile(r"\.(ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|rb|php|cs|swift|scala|sh)$", re.I)
 _SRC_HINT = re.compile(r"rocket|pipeline|integration|agent|engine|config|api|route|server|main|index|app|relay|deploy", re.I)
+# a pipeline defined in code and handed straight to the SDK: client.use({ pipeline ... })
+_INLINE_PIPE = re.compile(r"client\.use\(\s*\{\s*pipeline\b", re.I)
+# a GENERIC runner: client.use(filepath=<variable>) / client.use({ filepath: <var> }) — the pipe path
+# is computed/passed in, so specific .pipe names never appear next to the call (NOUS pattern).
+_RUNNER = re.compile(r"""client\.use\(\s*\{?\s*(?:file)?path\s*[=:]\s*(?!['"])""", re.I)
+# SDK-less HTTP / webhook invocation: a raw call to the hosted API or a deployed pipeline's webhook
+# (any language, no SDK). This IS a real runtime call to RocketRide.
+_RR_HTTP = re.compile(r"api\.rocketride\.ai|rocketride\.ai/[\w/-]*(pipeline|webhook|hook|run|invoke)", re.I)
+# a deployed-pipeline URL / webhook / token env (ROCKETRIDE_*_URL / _WEBHOOK / _ENDPOINT) — NOT a bare
+# ROCKETRIDE_API_KEY (auth only), which stays excluded.
+_HOSTED_ENV = re.compile(r"rocketride_\w*(url|webhook|endpoint|hook)", re.I)
+# a committed .json is a pipeline (not package.json / config) only if it has provider-bearing nodes
+_PIPE_HINT = re.compile(r"^(webhook|chat|prompt|response|source|memory|telegram)$|^(llm_|agent_|tool_|db_|embedding_|vector|response_|source_)", re.I)
+_JSON_PIPE_PATH = re.compile(r"pipeline|rocketride", re.I)
+_JSON_CONFIG = re.compile(r"(package(-lock)?|tsconfig|composer|schema|manifest|settings|config)\.json$|node_modules", re.I)
 
 
 # ---------------------------------------------------------------- pure detectors
@@ -41,8 +59,14 @@ def parse_pipe(text: str) -> dict | None:
         d = json.loads(text)
     except Exception:
         return None
-    comps = d.get("components", []) or []
-    providers = [str(c.get("provider", "")) for c in comps]
+    if not isinstance(d, dict):
+        return None
+    if isinstance(d.get("pipeline"), dict):
+        d = d["pipeline"]            # unwrap the { "pipeline": {…} } envelope — the SDK loader does the same
+    # canvas exports use "components"; hand-written pipes sometimes use "nodes" (and "type" for
+    # the provider). Accept both so a valid pipeline isn't read as 0 nodes.
+    comps = d.get("components") or d.get("nodes") or []
+    providers = [str(c.get("provider") or c.get("type") or "") for c in comps]
     return {
         "nodes": len(comps),
         "providers": providers,
@@ -57,20 +81,52 @@ def complexity_band(nodes: int) -> str:
     return "high" if nodes >= 9 else "medium" if nodes >= 4 else "low"
 
 
-def pipe_called(pipe_path: str, source_files: list) -> tuple:
-    """A pipeline is 'called' when a source file references its filename AND invokes the SDK
-    (client.use/send/chat) — i.e. it's loaded and driven, not just sitting in the repo.
-    Returns (called: bool, call_sites: [{file,line,snippet}])."""
-    base = pipe_path.rsplit("/", 1)[-1].lower()
+def _looks_like_pipeline(m: dict | None) -> bool:
+    """True only if a parsed JSON is actually a pipeline (has provider-bearing nodes) — so a
+    package.json / config file is never mistaken for one."""
+    return bool(m) and m["nodes"] > 0 and any(_PIPE_HINT.search(p) for p in m["providers"] if p)
+
+
+_INVOKE = ("client.use", "client.send", "client.chat", "rocketride start")
+
+
+def _first_site(source_files: list, rx, snippet: str) -> dict | None:
+    """First line matching `rx` across the source, as a call-site dict (for inline / runner patterns)."""
     for f in source_files:
-        low = f["text"].lower()
-        if base in low and any(k in low for k in ("client.use", "client.send", "client.chat")):
-            sites = []
-            for i, line in enumerate(f["text"].splitlines(), 1):
-                ll = line.lower()
-                if base in ll or "client.use" in ll or "client.send" in ll or "client.chat" in ll:
-                    sites.append({"file": f["path"], "line": i, "snippet": line.strip()[:110]})
-            return True, sites[:6]
+        mt = rx.search(f["text"])
+        if mt:
+            return {"file": f["path"], "line": f["text"][:mt.start()].count("\n") + 1, "snippet": snippet}
+    return None
+
+
+def _call_sites(f: dict, base: str) -> list:
+    out = []
+    for i, line in enumerate(f["text"].splitlines(), 1):
+        ll = line.lower()
+        if base in ll or any(k in ll for k in _INVOKE):
+            out.append({"file": f["path"], "line": i, "snippet": line.strip()[:110]})
+    return out
+
+
+def pipe_called(pipe_path: str, source_files: list) -> tuple:
+    """A pipeline is 'called' when the code loads/runs it via the SDK. Two patterns count:
+      • strong     — a file names the pipe (its basename appears, even inside resolve(HERE, '...'))
+                     AND that same file invokes client.use/send/chat / `rocketride start`;
+      • cross-file — the basename is referenced in one file while the SDK is invoked in another
+                     (common when the path is a shared constant or built dynamically).
+    Returns (called, call_sites[])."""
+    base = pipe_path.rsplit("/", 1)[-1].lower()
+    ref_files = [f for f in source_files if base in f["text"].lower()]
+    if not ref_files:
+        return False, []
+    # strong: same file names the pipe and drives the SDK
+    for f in ref_files:
+        if any(k in f["text"].lower() for k in _INVOKE):
+            return True, _call_sites(f, base)[:6]
+    # cross-file: pipe referenced here, SDK invoked somewhere else in the repo
+    if any(k in f["text"].lower() for f in source_files for k in _INVOKE):
+        sites = [s for f in ref_files for s in _call_sites(f, base)]
+        return True, sites[:6]
     return False, []
 
 
@@ -84,12 +140,14 @@ def sdk_metrics(source_files: list) -> dict:
         callsites += n
         if n or "from rocketride" in low or "import rocketride" in low or "@rocketride" in low:
             files_using += 1
-        # hosted-pipeline usage = a pipeline called by id via the API + an adapter. A bare
+        # hosted-pipeline usage = a pipeline called by id / a deployed webhook + an adapter. A bare
         # ROCKETRIDE_API_KEY is only authentication (present even for local-pipe projects like
         # constructor) — it is NOT hosted-pipeline usage, so it must not score on its own.
-        if "rocketride_pipeline" in low or "lib/rocketride" in low:
+        if "rocketride_pipeline" in low or "lib/rocketride" in low or _HOSTED_ENV.search(low):
             hosted = True
-        if "ws://localhost:5565" in low or "/v1/pipelines" in low:
+        # a real runtime call to RocketRide — the local engine, the /v1 API, the hosted API host, or a
+        # deployed pipeline's webhook (raw HTTP, no SDK, any language). This is genuine invocation.
+        if "ws://localhost:5565" in low or "/v1/pipelines" in low or _RR_HTTP.search(low):
             engine = True
     return {"callsites": callsites, "file_spread": files_using, "hosted": hosted, "engine": engine}
 
@@ -140,33 +198,48 @@ def evaluate(evidence: dict) -> dict:
     if evidence.get("dependency"):
         add("dependency in manifest", W["dependency"])
 
-    pipelines, called = [], 0
+    sdk = evidence.get("sdk", {"callsites": 0, "file_spread": 0, "hosted": False, "engine": False})
+
+    pipelines = []
     for p in evidence.get("pipes", []):
         m = p.get("metrics")
         nodes = m["nodes"] if m else 0
-        entry = {"name": p["path"], "nodes": nodes,
-                 "complexity": complexity_band(nodes),
-                 "has_agent": bool(m and m["has_agent"]),
-                 "has_llm": bool(m and m["has_llm"]),
-                 "providers": (m["providers"] if m else []),
-                 "called": p.get("called", False),
-                 "call_sites": p.get("call_sites", [])}
-        pipelines.append(entry)
-        if entry["called"]:
-            called += 1
-            add(f"pipeline called: {entry['name']}", W["pipeline_called"])
-            if entry["has_agent"]:
-                add(f"agent node in {entry['name']}", W["agent_node"])
-            if nodes >= 9:
-                add(f"complexity high ({nodes} nodes)", W["complexity_high"])
-            elif nodes >= 4:
-                add(f"complexity mid ({nodes} nodes)", W["complexity_mid"])
-            if m and (m["has_llm"] or m["tool_count"]):
-                add(f"tool/llm node in {entry['name']}", W["tool_or_llm"])
-        else:
-            add(f"PENALTY pipeline never called: {entry['name']}", -W["uncalled_penalty"])
+        pipelines.append({"name": p["path"], "nodes": nodes,
+                          "complexity": complexity_band(nodes),
+                          "has_agent": bool(m and m["has_agent"]),
+                          "has_llm": bool(m and m["has_llm"]),
+                          "tool_count": (m["tool_count"] if m else 0),
+                          "providers": (m["providers"] if m else []),
+                          "called": p.get("called", False),
+                          "call_sites": p.get("call_sites", [])})
 
-    sdk = evidence.get("sdk", {"callsites": 0, "file_spread": 0, "hosted": False, "engine": False})
+    called_pipes = [e for e in pipelines if e["called"]]
+    called = len(called_pipes)
+    # Does the repo genuinely run RocketRide pipelines? (SDK call-sites, live-engine calls, or an
+    # already-called pipe.) A bare hosted env-var alone does NOT count — see MCP AttackGraph.
+    repo_invokes = called > 0 or sdk.get("callsites", 0) > 0 or bool(sdk.get("engine"))
+
+    for e in called_pipes[:_MAX_SCORED_PIPES]:      # cap so a big generated suite can't run away
+        add(f"pipeline called: {e['name']}", W["pipeline_called"])
+        if e["has_agent"]:
+            add(f"agent node in {e['name']}", W["agent_node"])
+        if e["nodes"] >= 9:
+            add(f"complexity high ({e['nodes']} nodes)", W["complexity_high"])
+        elif e["nodes"] >= 4:
+            add(f"complexity mid ({e['nodes']} nodes)", W["complexity_mid"])
+        if e["has_llm"] or e["tool_count"]:
+            add(f"tool/llm node in {e['name']}", W["tool_or_llm"])
+    if called > _MAX_SCORED_PIPES:
+        add(f"(+{called - _MAX_SCORED_PIPES} more called pipeline(s) — score capped)", 0.0)
+
+    # Uncalled pipes are "for show" ONLY when the repo never invokes RocketRide at all. Otherwise
+    # they're experiments / examples / runtime-generated — no credit, but NO penalty, so a big
+    # uncalled suite can never bury genuine usage (the NOUS / rocketride-server false-negative).
+    if not repo_invokes:
+        for e in pipelines:
+            if not e["called"]:
+                add(f"PENALTY pipeline never called: {e['name']}", -W["uncalled_penalty"])
+
     if sdk.get("hosted"):
         add("hosted-pipeline usage", W["hosted"])
     if sdk.get("callsites", 0) >= 3:
@@ -307,6 +380,12 @@ def gather(url: str, gh) -> dict:
 
     pipes = [{"path": pp, "metrics": parse_pipe(raw(pp))}
              for pp in [p for p in paths if p.endswith(".pipe")][:12]]
+    # pipelines committed as .json (canvas "export as JSON" / reference copies), not config files
+    for jp in [p for p in paths if p.endswith(".json")
+               and _JSON_PIPE_PATH.search(p) and not _JSON_CONFIG.search(p)][:6]:
+        m = parse_pipe(raw(jp))
+        if _looks_like_pipeline(m):
+            pipes.append({"path": jp, "metrics": m})
 
     dependency, others = False, set()
     for mf in [p for p in paths if _MANIFEST.search(p)][:8]:
@@ -315,16 +394,29 @@ def gather(url: str, gh) -> dict:
             dependency = True
         others.update(o for o in rb.OTHER_PLATFORMS if o in txt.lower())
 
-    kw = [p for p in paths if _SRC_EXT.search(p) and _SRC_HINT.search(p)]
-    rest = [p for p in paths if _SRC_EXT.search(p) and p not in kw]
+    src = [p for p in paths if _SRC_EXT.search(p)]
+    rr = [p for p in src if "rocketride" in p.lower()]            # RR in the path — strongest signal
+    kw = [p for p in src if p not in rr and _SRC_HINT.search(p)]
+    rest = [p for p in src if p not in rr and p not in kw]
     source_files = []
-    for cf in (kw + rest)[:28]:
+    for cf in (rr + kw + rest)[:40]:
         txt = raw(cf)
         source_files.append({"path": cf, "text": txt})
         others.update(o for o in rb.OTHER_PLATFORMS if o in txt.lower())
 
+    # an in-code pipeline handed to client.use({ pipeline: … }) — the committed .json is its
+    # definition/mirror, so it counts as called even if its filename never appears in the code.
+    inline_site = _first_site(source_files, _INLINE_PIPE, "client.use({ pipeline: … }) — in-code pipeline")
+    # a generic runner — client.use(filepath=<variable>) — runs pipes whose names never appear next
+    # to the call (loaded dynamically / generated at runtime). Its pipes count as called-via-runner.
+    runner_site = _first_site(source_files, _RUNNER,
+                              "client.use(filepath=<variable>) — pipes run via a generic runner")
     for pe in pipes:
         called, sites = pipe_called(pe["path"], source_files)
+        if not called and pe["path"].endswith(".json") and inline_site:
+            called, sites = True, [inline_site]
+        if not called and runner_site:
+            called, sites = True, [runner_site]
         pe["called"], pe["call_sites"] = called, sites
 
     scaffold = any(p.endswith(".claude/rules/rocketride.md") for p in paths)

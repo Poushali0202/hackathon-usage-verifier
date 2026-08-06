@@ -1,0 +1,17 @@
+{
+  "name": "generic-runner suite (NOUS class) — many uncalled pipes but the repo invokes RocketRide, so NO penalty",
+  "evidence": {
+    "accessible": true,
+    "dependency": true,
+    "scaffold_only": false,
+    "other_platforms": [],
+    "sdk": {"callsites": 13, "file_spread": 5, "hosted": false, "engine": true},
+    "pipes": [
+      {"path": "integrations/smoke.pipe", "metrics": {"nodes": 2, "providers": ["webhook", "response"], "has_agent": false, "has_llm": false, "tool_count": 0, "project_id": ""}, "called": true, "call_sites": [{"file": "smoke.py", "line": 29, "snippet": "client.use(...)"}]},
+      {"path": "pipes/P-A.pipe", "metrics": {"nodes": 9, "providers": ["webhook", "agent_x", "llm_openai", "tool_http_request", "response"], "has_agent": true, "has_llm": true, "tool_count": 1, "project_id": ""}, "called": false, "call_sites": []},
+      {"path": "pipes/P-B.pipe", "metrics": {"nodes": 8, "providers": ["webhook", "agent_x", "llm_openai", "response"], "has_agent": true, "has_llm": true, "tool_count": 0, "project_id": ""}, "called": false, "call_sites": []},
+      {"path": "pipes/P-C.pipe", "metrics": {"nodes": 7, "providers": ["webhook", "agent_x", "response"], "has_agent": true, "has_llm": false, "tool_count": 0, "project_id": ""}, "called": false, "call_sites": []}
+    ]
+  },
+  "expect": {"tag": "Significant", "backbone": "Yes", "score": 4.0}
+}

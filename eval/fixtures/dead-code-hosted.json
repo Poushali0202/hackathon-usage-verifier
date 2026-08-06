@@ -5,7 +5,7 @@
     "dependency": false,
     "scaffold_only": false,
     "other_platforms": ["butterbase"],
-    "sdk": {"callsites": 1, "file_spread": 1, "hosted": true, "engine": false},
+    "sdk": {"callsites": 0, "file_spread": 0, "hosted": true, "engine": false},
     "pipes": [
       {
         "path": "hello.pipe",
