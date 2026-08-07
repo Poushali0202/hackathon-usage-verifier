@@ -149,7 +149,8 @@ def _resolve_columns(headers: list, data: list) -> dict:
     return idx
 
 
-def load_rows(path: str) -> list:
+def read_raw(path: str) -> list:
+    """Read a CSV/XLSX into a list of row-lists (non-empty rows only)."""
     p = Path(path)
     ext = p.suffix.lower()
     if ext == ".csv":
@@ -172,23 +173,23 @@ def load_rows(path: str) -> list:
         sys.exit(f"Unsupported file type: {ext} (use .csv or .xlsx)")
     if not raw:
         sys.exit("No rows found in the input file.")
-    # Locate the header row (skipping banner/title rows) and map columns by header aliases AND cell
-    # content — the column full of github.com URLs is the repo column whatever its header says, and a
-    # plain-text column becomes the label. Handles varied/ambiguous sheets with no per-format tweaks.
+    return raw
+
+
+def locate_columns(raw: list):
+    """Find the header row (skipping banner/title rows) and map columns by header aliases AND cell
+    content. Returns (header_row, idx) or (None, {}) when no GitHub column can be found."""
     width = max((len(r) for r in raw), default=0)
-    header_row, idx = None, {}
     for hr in range(min(8, len(raw))):
         if sum(1 for c in raw[hr] if str(c).strip()) < max(2, (width + 1) // 2):
             continue                              # too few filled cells -> a banner/title row, skip it
         m = _resolve_columns([str(h).strip() for h in raw[hr]], raw[hr + 1:hr + 31])
         if "github" in m:                         # a GitHub column is enough — the project/team label
-            header_row, idx = hr, m               # is optional and derived from the repo name when absent
-            break
-    if header_row is None:
-        seen = [str(h).strip() for h in raw[0] if str(h).strip()]
-        sys.exit("Could not find a GitHub-link column in this file (need at least one column of "
-                 "GitHub repo URLs).\n"
-                 f"Headers seen: {seen}")
+            return hr, m                          # is optional and derived from the repo name when absent
+    return None, {}
+
+
+def build_rows(raw: list, header_row: int, idx: dict) -> list:
     rows = [
         {c: (cells[i].strip() if i < len(cells) else "") for c, i in idx.items()}
         for cells in raw[header_row + 1:]
@@ -197,6 +198,105 @@ def load_rows(path: str) -> list:
         if "\n" in row.get("project", ""):
             row["project"] = row["project"].split("\n", 1)[0].strip()
     return rows
+
+
+def _no_columns_error(raw: list) -> str:
+    seen = [str(h).strip() for h in raw[0] if str(h).strip()]
+    return ("Could not find a GitHub-link column in this file (need at least one column of "
+            f"GitHub repo URLs).\nHeaders seen: {seen}")
+
+
+def load_rows(path: str) -> list:
+    """Deterministic sheet loading (no LLM). The app/CLI wrap this with the LLM column-mapping
+    fallback (llm_mapping_prompt / apply_llm_mapping) when this fails."""
+    raw = read_raw(path)
+    header_row, idx = locate_columns(raw)
+    if header_row is None:
+        sys.exit(_no_columns_error(raw))
+    return build_rows(raw, header_row, idx)
+
+
+# ---- LLM column-mapping fallback (the "sheet brain") -------------------------
+# Deterministic detection runs FIRST and is authoritative. Only when it can't find a GitHub
+# column do we ask the cloud LLM to map columns from a sample of the sheet — and its answer is
+# then VERIFIED deterministically (the claimed github column must really contain github URLs),
+# so the LLM can locate columns but can never invent data. Verdict scoring stays deterministic.
+
+def llm_mapping_prompt(raw: list) -> str:
+    sample = [[str(c)[:160] for c in r[:12]] for r in raw[:15]]
+    return (
+        "You map spreadsheet columns for a hackathon-submissions sheet. Below are the first rows "
+        "of the sheet as JSON (a list of rows; each row is a list of cell strings; columns are "
+        "0-indexed).\n\n"
+        f"SHEET SAMPLE:\n{json.dumps(sample, ensure_ascii=False)}\n\n"
+        "Identify, from the DATA PATTERNS in the cells (headers may be missing or weird):\n"
+        "  - github: the column whose cells are GitHub repository URLs\n"
+        "  - project: a column with a project/team name (plain text), if any\n"
+        "  - names / emails / feedback / demo / deployed: if clearly present\n"
+        "Also identify header_row: the 0-indexed row where headers sit (-1 if there is no header "
+        "row and data starts at row 0).\n\n"
+        'Reply with ONLY a strict JSON object, e.g. {"header_row": 0, "github": 2, "project": 0} — '
+        "column indexes as integers, omit roles you cannot find, no prose."
+    )
+
+
+def apply_llm_mapping(raw: list, text: str) -> list | None:
+    """Validate the LLM's column mapping deterministically and build rows from it.
+    Returns None when the mapping is missing/unverifiable (caller falls back to the error)."""
+    mapping = extract_json(text or "")
+    if not isinstance(mapping, dict) or "github" not in mapping:
+        return None
+    try:
+        header_row = int(mapping.get("header_row", 0))
+        gcol = int(mapping["github"])
+    except (TypeError, ValueError):
+        return None
+    start = header_row + 1 if header_row >= 0 else 0
+    data = raw[start:start + 40]
+    if not data:
+        return None
+    # trust-but-verify: the claimed github column must actually contain github.com repo URLs
+    vals = [str(r[gcol]).strip() for r in data if gcol < len(r) and str(r[gcol]).strip()]
+    hits = sum(1 for v in vals if _GH_CELL.search(v))
+    if not vals or hits < max(1, len(vals) // 2):
+        return None
+    idx = {}
+    for canon in FIELD_ALIASES:
+        v = mapping.get(canon)
+        if isinstance(v, int) and 0 <= v:
+            idx[canon] = v
+    idx["github"] = gcol
+    return build_rows(raw, header_row if header_row >= 0 else -1, idx)
+
+
+def title_upgrades(repo_name: str, title: str) -> bool:
+    """A README title improves on a repo-slug label only when it isn't just the slug re-spelled —
+    a title identical to the repo name would drop the owner suffix and re-collide duplicates."""
+    return bool(title) and _norm(title) != _norm(repo_name)
+
+
+def fill_project_labels(rows: list) -> None:
+    """Give every row a project label. Sheet-provided names always win; otherwise fall back to the
+    repo name — and when two DIFFERENT repos share a basename, disambiguate with the owner
+    ('hopper (vraj00222)') so distinct projects never collapse into one label. Rows labelled from
+    the repo are marked _label_from_repo so the README title can upgrade them later."""
+    for r in rows:
+        if not (r.get("project") or "").strip():
+            pr = parse_repo(r.get("github", ""))
+            if pr:
+                r["project"] = pr[1]
+                r["_label_from_repo"] = True
+    groups: dict = {}
+    for r in rows:
+        if r.get("_label_from_repo"):
+            groups.setdefault(_norm(r.get("project", "")), []).append(r)
+    for g in groups.values():
+        owners = {pr[0] for r in g if (pr := parse_repo(r.get("github", "")))}
+        if len(g) > 1 and len(owners) > 1:            # same repo NAME, different owners
+            for r in g:
+                pr = parse_repo(r.get("github", ""))
+                if pr:
+                    r["project"] = f"{pr[1]} ({pr[0]})"
 
 
 # ---- repo helpers ------------------------------------------------------------
@@ -427,12 +527,13 @@ RUBRIC = (
 
 # ---- pipeline driving --------------------------------------------------------
 
-async def verify_one(client, token, row, sem) -> dict:
+async def verify_one(client, token, row, sem, event_date=None, history_penalty=None) -> dict:
     """Verify one row with the DETERMINISTIC engine (same verdict as the web app), then use the cloud
     pipeline only to write the plain-English explanation. The verdict never depends on the LLM."""
     project = row.get("project", "")
     url = row.get("github", "")
     feedback = row.get("feedback", "")
+    label_from_repo = bool(row.get("_label_from_repo"))
     started = time.perf_counter()
 
     if repo_missing(url):
@@ -445,7 +546,7 @@ async def verify_one(client, token, row, sem) -> dict:
                 "evidence": [], "seconds": 0.0}
 
     # Python gathers evidence + measures pipelines deterministically (off the event loop)
-    evidence = await asyncio.to_thread(engine.gather, url, _gh)
+    evidence = await asyncio.to_thread(engine.gather, url, _gh, event_date, history_penalty)
     if not evidence.get("accessible"):
         return {**row, **engine.ZERO_EVAL, "repo_accessible": False, "description": "",
                 "rocketride_usage": "", "tag": "None", "backbone": "No", "classify_failed": False,
@@ -464,11 +565,20 @@ async def verify_one(client, token, row, sem) -> dict:
                 "deferred — resubmit this row.",
                 "evidence": [], "seconds": round(time.perf_counter() - started, 1)}
 
+    # a repo-slug label upgrades to the README's own title (sheet-provided names never touched;
+    # a title that's just the slug re-spelled is skipped so owner-suffixed duplicates stay distinct)
+    _pr = parse_repo(url)
+    _repo_name = _pr[1] if _pr else ""
+    if label_from_repo and title_upgrades(_repo_name, evidence.get("readme_title", "")):
+        project = evidence["readme_title"][:80]
+        row = {**row, "project": project}
+
     # DETERMINISTIC verdict — identical to the web app; no LLM decides the tag
     ev = engine.evaluate(evidence)
 
     # cloud pipeline writes ONLY the prose explanation (verdict is already fixed)
-    prompt = engine.explain_prompt(ev, project, url, feedback)
+    prompt = engine.explain_prompt(ev, project, url, feedback,
+                                   readme_head=evidence.get("readme_head", ""))
     prose: dict = {}
     async with sem:
         for attempt in range(3):
@@ -491,12 +601,21 @@ async def verify_one(client, token, row, sem) -> dict:
     elapsed = round(time.perf_counter() - started, 1)
     note = engine.det_note(ev)
     explain_failed = not prose
+    # README-stated names beat a repo-slug label / an empty team column (never a sheet-given value)
+    if label_from_repo and title_upgrades(_repo_name, str(prose.get("project_name") or "")):
+        row = {**row, "project": str(prose["project_name"])[:80]}
+    if not (row.get("names") or "").strip() and prose.get("team_members"):
+        row = {**row, "names": str(prose["team_members"])[:200]}
     return {
         **row, "repo_accessible": True, "classify_failed": False,   # the verdict never fails now
         "tag": ev["tag"], "backbone": ev["backbone"], "score": ev["score"],
         "pipelines": ev["pipelines"], "breakdown": ev["breakdown"],
         "pipelines_called": ev["pipelines_called"], "pipelines_total": ev["pipelines_total"],
         "other_platforms": ev["other_platforms"], "explain_failed": explain_failed,
+        "event_window": ev.get("event_window"), "reused_pipelines": ev.get("reused_pipelines", []),
+        "project_predates": ev.get("project_predates"), "history_tampered": ev.get("history_tampered", []),
+        "earliest_commit": ev.get("earliest_commit", ""), "repo_created_at": ev.get("repo_created_at", ""),
+        "history_penalty": ev.get("history_penalty"),
         "description": prose.get("description", ""),
         "rocketride_usage": prose.get("rocketride_usage", ""),
         "justification": (prose.get("justification", "") if not explain_failed
@@ -508,7 +627,31 @@ async def verify_one(client, token, row, sem) -> dict:
     }
 
 
-async def run(rows, concurrency: int) -> list:
+async def _llm_map_columns(raw: list):
+    """CLI sheet-brain fallback: one-shot cloud call to map columns, verified deterministically."""
+    client = RocketRideClient()
+    await client.connect()
+    token = None
+    try:
+        result = await client.use(filepath=PIPELINE_FILE, use_existing=True)
+        token = result["token"]
+        q = Question()
+        q.addQuestion(llm_mapping_prompt(raw))
+        resp = await asyncio.wait_for(client.chat(token=token, question=q), timeout=60)
+        answers = resp.get("answers", []) if isinstance(resp, dict) else []
+        return apply_llm_mapping(raw, answers[0] if answers else "")
+    except Exception:  # noqa: BLE001 — cloud unreachable -> caller falls back to the plain error
+        return None
+    finally:
+        if token:
+            try:
+                await client.terminate(token)
+            except Exception:
+                pass
+        await client.disconnect()
+
+
+async def run(rows, concurrency: int, event_date=None, history_penalty=None) -> list:
     sem = asyncio.Semaphore(concurrency)
     client = RocketRideClient()
     await client.connect()
@@ -517,8 +660,10 @@ async def run(rows, concurrency: int) -> list:
         result = await client.use(filepath=PIPELINE_FILE, use_existing=True)
         token = result["token"]
         print(f"Classifier live on Cloud (token: {token}); {len(rows)} rows, "
-              f"concurrency={concurrency}, github_token={'yes' if GH_TOKEN else 'NO'}\n")
-        tasks = [verify_one(client, token, r, sem) for r in rows]
+              f"concurrency={concurrency}, github_token={'yes' if GH_TOKEN else 'NO'}"
+              + (f", event window ±{engine.EVENT_GRACE_DAYS}d around {event_date}" if event_date else "")
+              + "\n")
+        tasks = [verify_one(client, token, r, sem, event_date, history_penalty) for r in rows]
         out = []
         for i, coro in enumerate(asyncio.as_completed(tasks), 1):
             res = await coro
@@ -606,6 +751,10 @@ def style_row(ws, row_i: int, r: dict) -> None:
         ws.cell(row=row_i, column=5).fill = PatternFill("solid", fgColor=TAG_FILL[tag])
     if bb in BACKBONE_FILL:
         ws.cell(row=row_i, column=6).fill = PatternFill("solid", fgColor=BACKBONE_FILL[bb])
+    # event-integrity flags (reused pipeline / project predates / date rewrite) — make the row shout
+    if r.get("reused_pipelines") or r.get("project_predates") or r.get("history_tampered"):
+        ws.cell(row=row_i, column=8).fill = PatternFill("solid", fgColor="FFC7CE")
+        ws.cell(row=row_i, column=8).font = Font(bold=True, color="9C0006")
     for col in (1, 2, 3, 4, 8, 9, 14):        # 14 = Pipeline Evidence (multi-line table)
         ws.cell(row=row_i, column=col).alignment = WRAP
     for col in (12, 13):                       # Score, Pipelines (Called/Total) — centered
@@ -706,17 +855,31 @@ def main() -> None:
     ap.add_argument("--out", help="output path (default: new sheet, or the --merge file)")
     ap.add_argument("--concurrency", type=int, default=2)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--event-date", help="hackathon date YYYY-MM-DD — flags/penalises pipelines "
+                    f"whose commit history starts before the event ± {engine.EVENT_GRACE_DAYS} days")
+    ap.add_argument("--history-penalty", type=float, default=None,
+                    help=f"judge-set deduction for predates/tamper flags (default "
+                    f"{engine.DEFAULT_HISTORY_PENALTY:g}; 0 = flag only)")
     args = ap.parse_args()
 
     GH_TOKEN = github_token()
-    rows = load_rows(args.input)
+    raw = read_raw(args.input)
+    header_row, idx = locate_columns(raw)
+    if header_row is not None:
+        rows = build_rows(raw, header_row, idx)
+    else:
+        print("Deterministic column detection failed — asking the cloud LLM to map the columns...")
+        rows = asyncio.run(_llm_map_columns(raw))
+        if rows is None:
+            sys.exit(_no_columns_error(raw))
+    fill_project_labels(rows)
     if args.limit:
         rows = rows[: args.limit]
     print(f"Loaded {len(rows)} rows from {args.input}"
           + (f"  (MERGE into {args.merge})" if args.merge else ""))
 
     t0 = time.perf_counter()
-    results = asyncio.run(run(rows, args.concurrency))
+    results = asyncio.run(run(rows, args.concurrency, args.event_date, args.history_penalty))
     print(f"\nTotal batch wall-clock: {time.perf_counter() - t0:.0f}s for {len(rows)} rows "
           f"(this is the real SLA number; the per-row seconds above are cumulative)")
     mark_duplicates(results)

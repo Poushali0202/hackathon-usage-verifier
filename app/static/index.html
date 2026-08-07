@@ -76,6 +76,21 @@
   textarea::placeholder{color:var(--muted);opacity:.7}
   textarea:focus,input[type=file]:focus{outline:none;border-color:var(--teal1);box-shadow:0 0 0 3px rgba(45,212,191,.16)}
   .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .dateinp{color:var(--ink);border-radius:10px;padding:8px 10px;background:rgba(0,0,0,.28);
+    border:1px solid rgba(255,255,255,.1);font:12.5px ui-monospace,Menlo,Consolas,monospace;
+    color-scheme:dark}
+  .dateinp:focus{outline:none;border-color:var(--teal1);box-shadow:0 0 0 3px rgba(45,212,191,.16)}
+  .dateinp.missing{border-color:rgba(240,120,120,.55)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .ptbl tr.reusedrow td{background:rgba(240,120,120,.08)}
+  .agebad{color:#f0a3a3;font-weight:800;white-space:nowrap}
+  .agesub{font-size:9.5px;color:#e08b8b;font-weight:600;margin-top:2px;line-height:1.35}
+  .hist{margin-top:9px;font-size:11.5px;color:var(--muted)}
+  .hist b{color:var(--ink)}
+  .dqline{margin-top:7px;padding:9px 12px;border-radius:10px;font-size:12px;line-height:1.5;font-weight:600;
+    background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.4);color:#f5d67a}
+  .dqline code{color:#facc15}
+  .dateinp.num{width:74px;text-align:center}
   .btn{background:linear-gradient(135deg,var(--teal1),var(--teal2));color:#04231f;border:0;padding:11px 20px;border-radius:12px;
     font-weight:700;font-size:13.5px;cursor:pointer;box-shadow:0 8px 20px rgba(45,212,191,.3)}
   .btn:hover{filter:brightness(1.06)} .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -247,14 +262,26 @@
       <label class="fld" for="repos">GitHub repo URLs — one per line</label>
       <textarea id="repos" placeholder="https://github.com/team/project&#10;https://github.com/another/repo"></textarea>
       <div class="row"><button class="btn" id="runLive">Run</button>
-        <span class="hint">Each repo is fetched locally (A), then classified on RocketRide Cloud (B).</span>
+        <label class="fld" for="eventDate" style="margin:0">Hackathon date (required)</label>
+        <input type="date" id="eventDate" class="dateinp" title="Pipelines first committed before this date ±2 days get a −1 reuse penalty. Leave empty to skip the check." />
+        <label class="fld" for="histPen" style="margin:0">Pre-event work penalty (pts)</label>
+        <input type="number" id="histPen" class="dateinp num" value="2" min="0" max="20" step="0.5" title="If a project's git commits are OLDER than the hackathon window (old project reused), or its commit dates look rewritten, deduct this many points from its score. 0 = just flag it, deduct nothing. A big number (10+) effectively disqualifies. Judge's choice." />
+        <span class="hint">Each repo is fetched locally (A), then classified on RocketRide Cloud (B).
+          Projects with git commits older than the hackathon date (±2 days) get flagged as pre-event work
+          and lose the penalty points you set (0 = flag only — judge's call).</span>
         <span id="dlSlot"></span></div>
     </div>
     <div class="ipanel glass" id="batchP" style="display:none">
       <label class="fld" for="file">Submissions file (.csv / .xlsx)</label>
       <input type="file" id="file" accept=".csv,.xlsx,.xls" />
       <div class="row"><button class="btn" id="runBatch">Run</button>
-        <span class="hint">Runs the full sheet and builds the styled Excel with clickable links.</span>
+        <label class="fld" for="eventDate2" style="margin:0">Hackathon date (required)</label>
+        <input type="date" id="eventDate2" class="dateinp" title="Pipelines first committed before this date ±2 days get a −1 reuse penalty. Leave empty to skip the check." />
+        <label class="fld" for="histPen2" style="margin:0">Pre-event work penalty (pts)</label>
+        <input type="number" id="histPen2" class="dateinp num" value="2" min="0" max="20" step="0.5" title="If a project's git commits are OLDER than the hackathon window (old project reused), or its commit dates look rewritten, deduct this many points from its score. 0 = just flag it, deduct nothing. A big number (10+) effectively disqualifies. Judge's choice." />
+        <span class="hint">Runs the full sheet and builds the styled Excel with clickable links.
+          Projects with git commits older than the hackathon date (±2 days) get flagged as pre-event work
+          and lose the penalty points you set (0 = flag only — judge's call).</span>
         <span id="dlSlot2"></span></div>
     </div>
   </div>
@@ -444,6 +471,7 @@ function renderDetail(r, digest){
         <div class="eyebrow">Deterministic evaluation — ground truth</div>
         <span class="score">Score ${r.score??'–'} · ${r.pipelines_called??0}/${r.pipelines_total??0} pipelines called</span></div>
       <div class="ptblwrap">${pipeTable(r)}</div>
+      ${historyHTML(r)}
       ${breakdownHTML(r)}
       ${(r.other_platforms&&r.other_platforms.length)?`<div class="muted" style="margin-top:8px;font-size:11.5px">Other platforms in code: ${r.other_platforms.map(x=>`<code>${esc(x)}</code>`).join(', ')}</div>`:''}
     </div>
@@ -457,15 +485,45 @@ function digestArr(a){ return (a&&a.length)?a.map(x=>`<code>${esc(x)}</code>`).j
 function pipeTable(r){
   const ps=r.pipelines||[];
   if(!ps.length) return '<p class="muted" style="margin-top:8px">No RocketRide pipeline (<code>.pipe</code>) found in the code.</p>';
+  const win=r.event_window, showAge=win&&ps.some(p=>p.first_commit);
   const rows=ps.map(p=>{
     const sites=(p.call_sites||[]).map(s=>`${esc(s.file)}:${s.line}`).join('<br>');
     const called=p.called?'<span class="yes">&#10003; called</span>':'<span class="no">&#10007; for show</span>';
-    return `<tr><td><code>${esc(p.name)}</code></td><td class="c">${p.nodes}</td>`+
+    const fc=p.first_commit?String(p.first_commit).slice(0,10):'&mdash;';
+    const age=p.predates
+      ?`<div class="agebad" title="Hackathon ${esc(win.event)}; allowed window ${esc(win.start)} &rarr; ${esc(win.end)}">&#9888; ${fc}</div>`+
+       `<div class="agesub">built before the event window ${esc(win.start)} &rarr; ${esc(win.end)} &middot; &minus;1</div>`
+      :`<span class="muted">${fc}</span>`;
+    return `<tr${p.predates?' class="reusedrow"':''}><td><code>${esc(p.name)}</code></td><td class="c">${p.nodes}</td>`+
       `<td class="c">${esc(p.complexity)}</td><td class="c">${p.has_agent?'agent':'&ndash;'}</td>`+
-      `<td class="c">${called}</td><td class="sites">${sites||'<span class="muted">&mdash;</span>'}</td></tr>`;
+      `<td class="c">${called}</td>${showAge?`<td class="c">${age}</td>`:''}`+
+      `<td class="sites">${sites||'<span class="muted">&mdash;</span>'}</td></tr>`;
   }).join('');
   return `<table class="ptbl"><thead><tr><th>Pipeline</th><th>Nodes</th><th>Complexity</th>`+
-    `<th>Type</th><th>Called?</th><th>Call sites (proof)</th></tr></thead><tbody>${rows}</tbody></table>`;
+    `<th>Type</th><th>Called?</th>${showAge?'<th>Built on</th>':''}<th>Call sites (proof)</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function historyHTML(r){
+  const win=r.event_window;
+  if(!win) return '';
+  const ec=r.earliest_commit?String(r.earliest_commit).slice(0,10):null;
+  const cr=r.repo_created_at?String(r.repo_created_at).slice(0,10):null;
+  let s=`<div class="hist">Repo history: earliest commit seen <b>${ec?esc(ec):'?'}</b>`+
+        `${cr?` &middot; repo created ${esc(cr)}`:''} &middot; allowed window ${esc(win.start)} &rarr; ${esc(win.end)}</div>`;
+  const pen=r.history_penalty, penTxt=(pen&&pen>0)?`&minus;${pen} penalty applied (judge-set)`:'no deduction &mdash; flag only (judge-set)';
+  if(r.project_predates){
+    const pp=r.project_predates, ppd=String(pp.date||'').slice(0,10);
+    const earliest=(ec&&(!ppd||ec<=ppd))?ec:ppd;
+    s+=`<div class="dqline">&#9888; FLAGGED &mdash; project history predates the event window: `+
+       `work on this repo goes back to <b>${esc(earliest||'?')}</b> `+
+       `(latest pre-window commit <code>${esc(pp.sha||'?')}</code> on ${esc(ppd||'?')}). `+
+       `Event was ${esc(win.event)} &plusmn;2 days. ${penTxt} &mdash; judge's call.</div>`;
+  }
+  (r.history_tampered||[]).slice(0,3).forEach(t=>{
+    s+=`<div class="dqline">&#9888; FLAGGED &mdash; commit-date rewrite detected: `+
+       `<code>${esc(t.sha)}</code> originally authored <b>${esc(String(t.author).slice(0,10))}</b> `+
+       `but re-stamped <b>${esc(String(t.committer).slice(0,10))}</b> into the window. ${penTxt} &mdash; judge's call.</div>`;
+  });
+  return s;
 }
 function breakdownHTML(r){
   const b=r.breakdown||[];
@@ -570,29 +628,50 @@ function resetRun(){
   $('#dlSlot').innerHTML=''; $('#dlSlot2').innerHTML=''; recount(); startTimer();
 }
 
+// ---- hackathon date (REQUIRED; the two pickers mirror each other) ----
+function eventDate(){ return $('#eventDate').value || $('#eventDate2').value || null; }
+function updateRunState(){
+  const ok=!!eventDate();
+  $('#runLive').disabled=!ok; $('#runBatch').disabled=!ok;
+  const t=ok?'':'Select the hackathon date first';
+  $('#runLive').title=t; $('#runBatch').title=t;
+  $('#eventDate').classList.toggle('missing',!ok); $('#eventDate2').classList.toggle('missing',!ok);
+}
+$('#eventDate').onchange=()=>{ $('#eventDate2').value=$('#eventDate').value; updateRunState(); };
+$('#eventDate2').onchange=()=>{ $('#eventDate').value=$('#eventDate2').value; updateRunState(); };
+// judge-set history penalty (mirrored between the two panels; 0 = flag only)
+function historyPenalty(){ const v=parseFloat($('#histPen').value); return isNaN(v)?null:Math.max(0,v); }
+$('#histPen').onchange=()=>{ $('#histPen2').value=$('#histPen').value; };
+$('#histPen2').onchange=()=>{ $('#histPen').value=$('#histPen2').value; };
+updateRunState();
+
 // ---- run: live ----
 $('#runLive').onclick=async()=>{
+  if(!eventDate()){ updateRunState(); return; }        // the hackathon date is required
   const urls=$('#repos').value.split('\n').map(s=>s.trim()).filter(Boolean);
   if(!urls.length) return;
   resetRun(); $('#runLive').disabled=true;
   try{
     const resp=await fetch('/api/verify/stream',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({repos:urls.map(u=>({github:u}))})});
+      body:JSON.stringify({repos:urls.map(u=>({github:u})), event_date:eventDate(), history_penalty:historyPenalty()})});
     await stream(resp);
   }catch(e){ $('#grid').innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; }
-  stopTimer(); $('#runLive').disabled=false;
+  stopTimer(); updateRunState();
 };
 // ---- run: batch ----
 $('#runBatch').onclick=async()=>{
+  if(!eventDate()){ updateRunState(); return; }        // the hackathon date is required
   const f=$('#file').files[0]; if(!f){ $('#grid').innerHTML='<div class="empty">Choose a file first.</div>'; return; }
   resetRun(); $('#runBatch').disabled=true;
   const fd=new FormData(); fd.append('file',f);
+  fd.append('event_date',eventDate());
+  if(historyPenalty()!==null) fd.append('history_penalty',historyPenalty());
   try{
     const resp=await fetch('/api/batch',{method:'POST',body:fd});
     if(!resp.ok){ throw new Error(await resp.text()); }
     await stream(resp);
   }catch(e){ $('#grid').innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; }
-  stopTimer(); $('#runBatch').disabled=false;
+  stopTimer(); updateRunState();
 };
 </script>
 </body>

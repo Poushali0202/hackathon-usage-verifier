@@ -1,0 +1,24 @@
+{
+  "name": "tampered history — FLAGGED; judge maxed the penalty (6) so 6.0 -> 0.0 None (judge-driven DQ)",
+  "evidence": {
+    "accessible": true,
+    "dependency": true,
+    "scaffold_only": false,
+    "other_platforms": [],
+    "event_window": {"event": "2026-08-04", "start": "2026-08-02", "end": "2026-08-06"},
+    "history_penalty": 6.0,
+    "project_predates": null,
+    "history_tampered": [{"sha": "dead007", "author": "2026-07-15T12:00:00Z", "committer": "2026-08-04T08:00:00Z"}],
+    "sdk": {"callsites": 4, "file_spread": 2, "hosted": false, "engine": false},
+    "pipes": [
+      {
+        "path": "flow.pipe",
+        "metrics": {"nodes": 6, "providers": ["chat", "prompt", "agent_x", "llm_anthropic", "tool_http_request", "response_answers"], "has_agent": true, "has_llm": true, "tool_count": 1, "project_id": ""},
+        "called": true,
+        "call_sites": [{"file": "app.py", "line": 10, "snippet": "client.use(filepath='flow.pipe')"}],
+        "first_commit": "2026-08-03T10:00:00Z"
+      }
+    ]
+  },
+  "expect": {"tag": "None", "backbone": "No", "score": 0.0}
+}

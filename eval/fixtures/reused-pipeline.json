@@ -1,0 +1,21 @@
+{
+  "name": "reused pipeline — called llm pipeline first committed BEFORE the event window (−1, demoted to Moderate)",
+  "evidence": {
+    "accessible": true,
+    "dependency": true,
+    "scaffold_only": false,
+    "other_platforms": [],
+    "event_window": {"event": "2026-08-04", "start": "2026-08-02", "end": "2026-08-06"},
+    "sdk": {"callsites": 2, "file_spread": 1, "hosted": false, "engine": false},
+    "pipes": [
+      {
+        "path": "pipeline/old_flow.pipe",
+        "metrics": {"nodes": 6, "providers": ["chat", "prompt", "llm_anthropic", "memory_internal", "tool_http_request", "response_answers"], "has_agent": false, "has_llm": true, "tool_count": 1, "project_id": ""},
+        "called": true,
+        "call_sites": [{"file": "app/run.py", "line": 12, "snippet": "client.use(filepath='pipeline/old_flow.pipe')"}],
+        "first_commit": "2026-07-01T10:00:00Z"
+      }
+    ]
+  },
+  "expect": {"tag": "Moderate", "backbone": "Yes", "score": 3.0}
+}

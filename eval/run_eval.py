@@ -109,6 +109,64 @@ def run_detectors() -> int:
        bool(engine._RR_HTTP.search("POST https://api.rocketride.ai/v1/run")))
     ck("_HOSTED_ENV matches a webhook-URL env, not a bare API key",
        bool(engine._HOSTED_ENV.search("ROCKETRIDE_WEBHOOK_URL")) and not engine._HOSTED_ENV.search("ROCKETRIDE_API_KEY"))
+
+    # commit-freshness: the ±grace-day window, and in-window commits are NOT penalised
+    w = engine.event_window("2026-08-04")
+    ck("event_window = event ±2 days", w and w["start"] == "2026-08-02" and w["end"] == "2026-08-06")
+    ck("event_window tolerates a bad date", engine.event_window("not-a-date") is None)
+    ev_ok = {"accessible": True, "dependency": True, "other_platforms": [],
+             "event_window": w, "sdk": {"callsites": 2, "file_spread": 1, "hosted": False, "engine": False},
+             "pipes": [{"path": "f.pipe", "called": True, "first_commit": "2026-08-03T09:00:00Z",
+                        "call_sites": [],
+                        "metrics": {"nodes": 6, "providers": ["chat", "llm_x"], "has_agent": False,
+                                    "has_llm": True, "tool_count": 0, "project_id": ""}}]}
+    r_ok = engine.evaluate(ev_ok)
+    ck("in-window first commit -> no reuse penalty", not r_ok["reused_pipelines"] and r_ok["score"] == 4.0)
+
+    # judge-set history penalty: default deduction applies when no value given; 0 = flag only
+    ev_pp = dict(ev_ok, project_predates={"date": "2026-07-01T00:00:00Z", "sha": "old0001"})
+    r_pp = engine.evaluate(ev_pp)
+    ck("predates flag deducts the DEFAULT penalty (4.0 -> 2.0), tag survives",
+       r_pp["score"] == 2.0 and r_pp["tag"] == "Moderate" and r_pp["history_penalty"] == 2.0)
+    r_p0 = engine.evaluate(dict(ev_pp, history_penalty=0))
+    ck("penalty 0 = flag only (score unchanged, flag still present)",
+       r_p0["score"] == 4.0 and r_p0["project_predates"] and r_p0["history_penalty"] == 0.0)
+
+    # LLM sheet-brain: mapping is verified deterministically (trust-but-verify)
+    sys.path.insert(0, str(HERE.parent))
+    import run_batch as rb
+    raw = [["Some Col", "Links", "Score"],
+           ["alpha", "https://github.com/a/x", "10"],
+           ["beta", "https://github.com/b/y", "20"]]
+    good = rb.apply_llm_mapping(raw, '{"header_row": 0, "github": 1, "project": 0}')
+    ck("apply_llm_mapping accepts a verified mapping", bool(good) and good[0]["github"].endswith("a/x")
+       and good[0]["project"] == "alpha")
+    ck("apply_llm_mapping rejects a lying mapping (claimed github col has no URLs)",
+       rb.apply_llm_mapping(raw, '{"header_row": 0, "github": 2}') is None)
+
+    # README-title upgrade guard: a real name upgrades; the slug re-spelled does NOT (would
+    # drop the owner suffix and re-collide duplicate repo names — the memory-meets-motion case)
+    ck("title_upgrades: real README name upgrades the slug",
+       rb.title_upgrades("memory-meets-motion", "DealBench"))
+    ck("title_upgrades: slug re-spelled does NOT upgrade",
+       not rb.title_upgrades("memory-meets-motion", "Memory Meets Motion")
+       and not rb.title_upgrades("Memory_Meets_Motion", "memory meets motion")
+       and not rb.title_upgrades("x", ""))
+
+    # history tamper scan: author-vs-committer evidence of a rewrite into the window
+    win2 = engine.event_window("2026-08-04")
+    commits = [
+        {"sha": "dead007beef", "commit": {"author": {"date": "2026-07-15T12:00:00Z"},
+                                          "committer": {"date": "2026-08-04T08:00:00Z"}}},
+        {"sha": "c1eancafe00", "commit": {"author": {"date": "2026-08-03T09:00:00Z"},
+                                          "committer": {"date": "2026-08-03T09:05:00Z"}}},
+    ]
+    t, earliest = engine.history_tamper_scan(commits, win2)
+    ck("tamper scan flags pre-window author re-stamped into the window",
+       len(t) == 1 and t[0]["sha"] == "dead007")
+    ck("tamper scan: in-window rebase of in-window work is NOT flagged",
+       all(x["sha"] != "c1eanca" for x in t))
+    ck("tamper scan reports the earliest date seen", earliest == "2026-07-15T12:00:00Z")
     print("-" * 68)
     return bad
 

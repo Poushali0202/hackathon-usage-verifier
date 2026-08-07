@@ -108,11 +108,13 @@ class ClassifierPool:
             except Exception:
                 pass
 
-    async def explain(self, evaluation: dict, project: str, repo: str, feedback: str) -> dict:
+    async def explain(self, evaluation: dict, project: str, repo: str, feedback: str,
+                      readme_head: str = "") -> dict:
         """Put the DETERMINISTIC verdict into plain English for a judge. Returns prose only
-        (description / rocketride_usage / justification) — it never sets the tag/backbone. Returns
-        {"explain_failed": True} if the cloud classifier can't be reached; the verdict still stands."""
-        prompt = engine.explain_prompt(evaluation, project, repo, feedback)
+        (description / rocketride_usage / justification, plus README-stated project_name /
+        team_members) — it never sets the tag/backbone. Returns {"explain_failed": True} if the
+        cloud classifier can't be reached; the verdict still stands."""
+        prompt = engine.explain_prompt(evaluation, project, repo, feedback, readme_head)
         async with self._sem:
             parsed: dict = {}
             for attempt in range(3):
@@ -137,7 +139,32 @@ class ClassifierPool:
                     break
         if not parsed:
             return {"explain_failed": True}
-        return {k: parsed.get(k, "") for k in ("description", "rocketride_usage", "justification")}
+        return {k: parsed.get(k, "") for k in ("description", "rocketride_usage", "justification",
+                                               "project_name", "team_members")}
+
+    async def ask(self, prompt: str, timeout: int = 60) -> str:
+        """One-shot generic question to the cloud pipeline (e.g. the sheet-brain column mapping).
+        Returns the raw answer text, or '' if the cloud is unreachable."""
+        async with self._sem:
+            for attempt in range(2):
+                if attempt:
+                    await asyncio.sleep(1.0)
+                try:
+                    async with self._lock:
+                        await self._connect_locked()
+                        client, token = self._client, self._token
+                    q = Question()
+                    q.addQuestion(prompt)
+                    resp = await asyncio.wait_for(client.chat(token=token, question=q), timeout=timeout)
+                except asyncio.TimeoutError:
+                    continue
+                except Exception:
+                    await self._reset()
+                    continue
+                answers = resp.get("answers", []) if isinstance(resp, dict) else []
+                if answers:
+                    return answers[0]
+        return ""
 
     async def aclose(self) -> None:
         await self._reset()
@@ -148,7 +175,9 @@ class ClassifierPool:
 # deterministic default fields carried by every result (so UI + Excel never see a missing key)
 _ZERO = {"score": 0.0, "pipelines": [], "breakdown": [], "pipelines_called": 0,
          "pipelines_total": 0, "other_platforms": [], "explain_failed": False,
-         "classify_failed": False}
+         "classify_failed": False, "event_window": None, "reused_pipelines": [],
+         "project_predates": None, "history_tampered": [], "earliest_commit": "",
+         "repo_created_at": "", "history_penalty": None}
 
 
 def _no_repo(row: dict) -> dict:
@@ -189,20 +218,24 @@ def _eval_summary(ev: dict) -> dict:
     }
 
 
-async def verify_row(row: dict, pool: ClassifierPool):
+async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = None,
+                     history_penalty: float | None = None):
     """Async generator: yields ('stage', {...}) events then a final ('result', {...}).
 
     Stage A (fetch + measure) runs the DETERMINISTIC engine off the event loop — it gathers the repo
-    and computes the verdict (tag/backbone/score + the ground-truth pipeline table). Stage B asks the
-    RocketRide Cloud pipeline only to EXPLAIN that verdict in prose. The verdict never depends on the
-    LLM, so a slow/offline classifier degrades to a missing explanation, not a wrong tag."""
+    and computes the verdict (tag/backbone/score + the ground-truth pipeline table, plus the
+    commit-freshness check when `event_date` is given). Stage B asks the RocketRide Cloud pipeline
+    only to EXPLAIN that verdict in prose. The verdict never depends on the LLM, so a slow/offline
+    classifier degrades to a missing explanation, not a wrong tag."""
     started = time.perf_counter()
     url = row.get("github", "")
     # Live mode submits only a URL; fall back to the repo name so cards/detail/Excel aren't "(unnamed)"
+    label_from_repo = bool(row.get("_label_from_repo"))
     if not (row.get("project") or "").strip():
         pr = rb.parse_repo(url)
         if pr:
             row = {**row, "project": pr[1]}
+            label_from_repo = True
     project = row.get("project", "") or "(unnamed)"
 
     if rb.repo_missing(url):
@@ -211,7 +244,7 @@ async def verify_row(row: dict, pool: ClassifierPool):
 
     yield "stage", {"stage": "fetch", "engine": "local", "project": project,
                     "message": "Gathering code + measuring pipelines — local Pipeline A"}
-    evidence = await asyncio.to_thread(engine.gather, url, rb._gh)
+    evidence = await asyncio.to_thread(engine.gather, url, rb._gh, event_date, history_penalty)
 
     if not evidence.get("accessible"):
         yield "result", {**_inaccessible(row, evidence), "seconds": round(time.perf_counter() - started, 1)}
@@ -220,14 +253,30 @@ async def verify_row(row: dict, pool: ClassifierPool):
         yield "result", {**_incomplete(row, evidence), "seconds": round(time.perf_counter() - started, 1)}
         return
 
+    # a repo-slug label upgrades to the README's own title (sheet-provided names are never touched;
+    # a title that's just the slug re-spelled is skipped so owner-suffixed duplicates stay distinct)
+    pr = rb.parse_repo(url)
+    repo_name = pr[1] if pr else ""
+    if label_from_repo and rb.title_upgrades(repo_name, evidence.get("readme_title", "")):
+        project = evidence["readme_title"][:80]
+        row = {**row, "project": project}
+
     # DETERMINISTIC verdict (no LLM): tag, backbone, score, and the ground-truth pipeline table
     ev = engine.evaluate(evidence)
 
     yield "stage", {"stage": "classify", "engine": "cloud", "project": project,
                     "message": "Explaining the verdict on RocketRide Cloud — Pipeline B",
                     "digest": _eval_summary(ev)}
-    prose = await pool.explain(ev, project, url, row.get("feedback", ""))
+    prose = await pool.explain(ev, project, url, row.get("feedback", ""),
+                               readme_head=evidence.get("readme_head", ""))
     explain_failed = bool(prose.get("explain_failed"))
+
+    # README-stated names beat a repo-slug label / an empty team column (never a sheet-given value)
+    if label_from_repo and rb.title_upgrades(repo_name, str(prose.get("project_name") or "")):
+        project = str(prose["project_name"])[:80]
+        row = {**row, "project": project}
+    if not (row.get("names") or "").strip() and prose.get("team_members"):
+        row = {**row, "names": str(prose["team_members"])[:200]}
 
     note = engine.det_note(ev)
     yield "result", {
@@ -237,6 +286,10 @@ async def verify_row(row: dict, pool: ClassifierPool):
         "pipelines": ev["pipelines"], "breakdown": ev["breakdown"],
         "pipelines_called": ev["pipelines_called"], "pipelines_total": ev["pipelines_total"],
         "other_platforms": ev["other_platforms"], "explain_failed": explain_failed,
+        "event_window": ev.get("event_window"), "reused_pipelines": ev.get("reused_pipelines", []),
+        "project_predates": ev.get("project_predates"), "history_tampered": ev.get("history_tampered", []),
+        "earliest_commit": ev.get("earliest_commit", ""), "repo_created_at": ev.get("repo_created_at", ""),
+        "history_penalty": ev.get("history_penalty"),
         "description": prose.get("description", ""),
         "rocketride_usage": prose.get("rocketride_usage", ""),
         "justification": (prose.get("justification", "") if not explain_failed

@@ -25,9 +25,13 @@ W = {
     "sdk_callsites":    0.5,   # C2  >=3 SDK call-sites
     "file_spread":      0.5,   # C3  >=2 distinct files use RocketRide
     "uncalled_penalty": 1.0,   # B2  per pipeline present but NEVER called
+    "predates_penalty": 1.0,   # D4  flat, once per project: a called pipeline predates the event window
 }
 THRESHOLDS = {"significant": 4.0, "moderate": 2.0, "less": 1.0}
 _MAX_SCORED_PIPES = 6   # cap how many called pipelines score, so a big generated suite can't run away
+EVENT_GRACE_DAYS = 2    # commits within event_date ± this many days are fine (no reuse penalty)
+DEFAULT_HISTORY_PENALTY = 2.0   # judge-configurable deduction when a project's history predates the
+                                # window or a commit-date rewrite is detected (0 = flag only)
 
 _SDK_CALL = re.compile(r"\b(RocketRideClient|client\.use|client\.chat|client\.send|client\.connect)", re.I)
 _MANIFEST = re.compile(r"(^|/)(package\.json|requirements\.txt|pyproject\.toml|Cargo\.toml|go\.mod"
@@ -79,6 +83,40 @@ def parse_pipe(text: str) -> dict | None:
 
 def complexity_band(nodes: int) -> str:
     return "high" if nodes >= 9 else "medium" if nodes >= 4 else "low"
+
+
+def history_tamper_scan(commits: list, win: dict) -> tuple:
+    """Scan a repo's commit list for evidence of history rewriting. Git stamps every commit with an
+    AUTHOR date (when the work was originally made) and a COMMITTER date (when it was last
+    rewritten). A commit whose committer date sits in/after the event window while its author date
+    is OLDER than the window is pre-existing work re-stamped for the event (rebase / amend /
+    filter-branch) — git's own metadata records the rewrite.
+    Returns ([tampered commits], earliest_date_seen)."""
+    tampered, earliest = [], ""
+    for it in commits or []:
+        c = (it or {}).get("commit", {})
+        a = (c.get("author") or {}).get("date", "") or ""
+        m = (c.get("committer") or {}).get("date", "") or ""
+        for d in (a, m):
+            if d and (not earliest or d < earliest):
+                earliest = d
+        if a and m and a[:10] < win["start"] and m[:10] >= win["start"]:
+            tampered.append({"sha": (it.get("sha") or "")[:7], "author": a, "committer": m})
+    return tampered[:5], earliest
+
+
+def event_window(event_date: str | None) -> dict | None:
+    """The allowed commit window for an event date (YYYY-MM-DD): event ± EVENT_GRACE_DAYS.
+    Pipelines whose history starts BEFORE the window are pre-existing work (reuse)."""
+    if not event_date:
+        return None
+    try:
+        from datetime import date, timedelta
+        d = date.fromisoformat(str(event_date)[:10])
+    except ValueError:
+        return None
+    g = timedelta(days=EVENT_GRACE_DAYS)
+    return {"event": d.isoformat(), "start": (d - g).isoformat(), "end": (d + g).isoformat()}
 
 
 def _looks_like_pipeline(m: dict | None) -> bool:
@@ -211,7 +249,8 @@ def evaluate(evidence: dict) -> dict:
                           "tool_count": (m["tool_count"] if m else 0),
                           "providers": (m["providers"] if m else []),
                           "called": p.get("called", False),
-                          "call_sites": p.get("call_sites", [])})
+                          "call_sites": p.get("call_sites", []),
+                          "first_commit": p.get("first_commit")})
 
     called_pipes = [e for e in pipelines if e["called"]]
     called = len(called_pipes)
@@ -240,12 +279,53 @@ def evaluate(evidence: dict) -> dict:
             if not e["called"]:
                 add(f"PENALTY pipeline never called: {e['name']}", -W["uncalled_penalty"])
 
+    # D4 — commit-history freshness: a CALLED pipeline whose history starts BEFORE the allowed
+    # event window (event ± grace days) is pre-existing work being reused for the hackathon.
+    # Flat −1 once per project, loudly flagged. ISO dates compare lexicographically.
+    win = evidence.get("event_window")
+    reused = []
+    if win:
+        for e in pipelines:
+            e["predates"] = bool(e["called"] and e.get("first_commit")
+                                 and str(e["first_commit"])[:10] < win["start"])
+        reused = [e for e in pipelines if e.get("predates")]
+        if reused:
+            names = ", ".join(f"{e['name']} (first commit {str(e['first_commit'])[:10]})"
+                              for e in reused[:4])
+            add(f"PENALTY: pipeline predates event window {win['start']}..{win['end']} — {names}",
+                -W["predates_penalty"])
+
     if sdk.get("hosted"):
         add("hosted-pipeline usage", W["hosted"])
     if sdk.get("callsites", 0) >= 3:
         add(f"SDK call-sites ({sdk['callsites']})", W["sdk_callsites"])
     if sdk.get("file_spread", 0) >= 2:
         add(f"SDK spread ({sdk['file_spread']} files)", W["file_spread"])
+
+    # D5/D6 — event-integrity FLAGS (judge's call, when an event window is set). Each deducts the
+    # judge-configurable history penalty (default 2; 0 = flag only, a large value ≈ disqualify):
+    #   D5 project predates: ANY commit before the window start = the project wasn't built at the
+    #      event (old project + a few event-day commits).
+    #   D6 history tampered: git's author-vs-committer dates prove pre-window work was re-stamped
+    #      into the window (rebase/amend/filter-branch) — faked freshness.
+    project_predates = evidence.get("project_predates")
+    tampered = evidence.get("history_tampered") or []
+    pen = evidence.get("history_penalty")
+    pen = DEFAULT_HISTORY_PENALTY if pen is None else max(0.0, float(pen))
+    if win and project_predates:
+        pp_date = str(project_predates.get("date", ""))[:10]
+        early = str(evidence.get("earliest_commit", ""))[:10]
+        earliest = min(d for d in (pp_date, early) if d) if (pp_date or early) else "?"
+        add(f"⚠ FLAGGED: project history predates the event window {win['start']}..{win['end']} — "
+            f"work goes back to {earliest} (latest pre-window commit "
+            f"{project_predates.get('sha', '?')} on {pp_date or '?'}); judge-set penalty",
+            -pen)
+    if win and tampered:
+        t0 = tampered[0]
+        add(f"⚠ FLAGGED: commit-date rewrite detected — {t0['sha']} authored "
+            f"{str(t0['author'])[:10]} but re-stamped {str(t0['committer'])[:10]} into the window; "
+            f"judge-set penalty",
+            -pen)
 
     score = max(0.0, round(score, 1))
     backbone = _backbone(pipelines, sdk, evidence)
@@ -256,13 +336,23 @@ def evaluate(evidence: dict) -> dict:
         backbone = "No"
     return {"tag": tag, "backbone": backbone, "score": score, "pipelines": pipelines, "sdk": sdk,
             "breakdown": breakdown, "pipelines_called": called,
-            "pipelines_total": len(pipelines), "other_platforms": evidence.get("other_platforms", [])}
+            "pipelines_total": len(pipelines), "other_platforms": evidence.get("other_platforms", []),
+            "event_window": win,
+            "history_penalty": pen if win else None,
+            "project_predates": project_predates if win else None,
+            "history_tampered": tampered if win else [],
+            "earliest_commit": evidence.get("earliest_commit", ""),
+            "repo_created_at": evidence.get("repo_created_at", ""),
+            "reused_pipelines": [{"name": e["name"], "first_commit": e.get("first_commit")}
+                                 for e in reused]}
 
 
 # default deterministic-eval fields for short-circuit rows (no repo / inaccessible), so the UI +
 # Excel never see a missing key. Kept here so the app and the CLI use the exact same shape.
 ZERO_EVAL = {"score": 0.0, "pipelines": [], "breakdown": [], "pipelines_called": 0,
-             "pipelines_total": 0, "other_platforms": []}
+             "pipelines_total": 0, "other_platforms": [], "event_window": None,
+             "reused_pipelines": [], "project_predates": None, "history_tampered": [],
+             "earliest_commit": "", "repo_created_at": "", "history_penalty": None}
 
 
 # ---------------------------------------------------------------- LLM prose helpers (shared: app + CLI)
@@ -282,7 +372,10 @@ Return ONLY a strict JSON object — start with { and end with }, no prose outsi
                         node count, and whether/where they are called; ground every claim in the table>",
   "justification": "<2-3 sentences: why the code earns THIS tag and backbone, citing the table (e.g.
                      'the 7-node agent pipeline is loaded and run at relay.ts:83'). If a pipeline is
-                     present but never called, say so explicitly.>"
+                     present but never called, say so explicitly. If a pipeline predates the event
+                     window (reused), call that out.>",
+  "project_name": "<ONLY if the README clearly states the project's name — else omit>",
+  "team_members": "<ONLY if the README clearly lists team member names — comma-separated — else omit>"
 }
 Rules: cite ONLY what is in the evidence. Never contradict the verdict. If the tag is None, state that
 the code shows no real RocketRide usage."""
@@ -316,7 +409,8 @@ def extract_prose(text: str) -> dict:
     return best
 
 
-def explain_prompt(evaluation: dict, project: str, repo: str, feedback: str) -> str:
+def explain_prompt(evaluation: dict, project: str, repo: str, feedback: str,
+                   readme_head: str = "") -> str:
     """Build the prose prompt: the deterministic verdict + the ground-truth table as fixed context."""
     payload = {
         "verdict": {"tag": evaluation["tag"], "backbone": evaluation["backbone"],
@@ -324,27 +418,54 @@ def explain_prompt(evaluation: dict, project: str, repo: str, feedback: str) -> 
         "score_breakdown": evaluation.get("breakdown", []),
         "pipelines": [{"name": p["name"], "nodes": p["nodes"], "complexity": p["complexity"],
                        "has_agent": p["has_agent"], "called": p["called"],
+                       "first_commit": p.get("first_commit"),
                        "call_sites": [f"{s['file']}:{s['line']}" for s in p.get("call_sites", [])]}
                       for p in evaluation.get("pipelines", [])],
         "sdk": evaluation.get("sdk", {}),
         "other_platforms": evaluation.get("other_platforms", []),
+        "event_window": evaluation.get("event_window"),
+        "reused_pipelines": evaluation.get("reused_pipelines", []),
     }
+    readme_block = (f"\n\nREADME EXCERPT (for project_name / team_members / description only):\n"
+                    f"{readme_head[:2500]}" if readme_head else "")
     return (EXPLAIN_PROMPT
             + f"\n\nPROJECT: {project}\nREPO: {repo}\n"
             + "TEAM FEEDBACK (context only — the verdict is already fixed from code): "
             + f"{feedback or '(none provided)'}\n\nDETERMINISTIC EVALUATION (do not change the verdict):\n"
-            + json.dumps(payload, indent=2))
+            + json.dumps(payload, indent=2) + readme_block)
 
 
 def evidence_lines(ev: dict) -> list:
     """Deterministic, judge-readable evidence bullets built straight from the metrics (no LLM)."""
     lines = []
+    win = ev.get("event_window")
+    pen = ev.get("history_penalty")
+    pen_txt = (f"−{pen:g} judge-set penalty" if pen else "flag only — no deduction")
+    if win and ev.get("project_predates"):
+        pp = ev["project_predates"]
+        pp_date = str(pp.get("date", ""))[:10]
+        early = str(ev.get("earliest_commit", ""))[:10]
+        earliest = min(d for d in (pp_date, early) if d) if (pp_date or early) else "?"
+        lines.append(f"⚠ FLAGGED — project history predates the event window "
+                     f"{win['start']}..{win['end']}: work goes back to {earliest}; latest pre-window "
+                     f"commit {pp.get('sha', '?')} on {pp_date or '?'} ({pen_txt}; judge's call)")
+    if win and ev.get("history_tampered"):
+        for t in ev["history_tampered"][:3]:
+            lines.append(f"⚠ FLAGGED — commit-date rewrite: {t['sha']} authored "
+                         f"{str(t['author'])[:10]} but re-stamped {str(t['committer'])[:10]} "
+                         f"({pen_txt}; judge's call)")
+    if win and ev.get("reused_pipelines"):
+        for r in ev["reused_pipelines"]:
+            lines.append(f"⚠ REUSED PIPELINE: {r['name']} first committed "
+                         f"{str(r.get('first_commit') or '?')[:10]} — BEFORE the event window "
+                         f"{win['start']}..{win['end']} (−1 penalty)")
     for p in ev.get("pipelines", []):
         where = "; ".join(f"{s['file']}:{s['line']}" for s in p.get("call_sites", [])[:3])
         status = (f"CALLED @ {where}" if p["called"] and where
                   else "CALLED" if p["called"] else "NOT called (present for show)")
+        fc = f", first commit {str(p['first_commit'])[:10]}" if p.get("first_commit") else ""
         lines.append(f"{p['name']} — {p['nodes']} nodes ({p['complexity']}), "
-                     f"{'agent' if p['has_agent'] else 'no agent'} — {status}")
+                     f"{'agent' if p['has_agent'] else 'no agent'} — {status}{fc}")
     sdk = ev.get("sdk", {})
     lines.append(f"SDK: {sdk.get('callsites', 0)} call-site(s) across {sdk.get('file_spread', 0)} "
                  f"file(s)" + (", hosted/Cloud usage" if sdk.get("hosted") else ""))
@@ -354,13 +475,35 @@ def evidence_lines(ev: dict) -> list:
 
 
 def det_note(ev: dict) -> str:
-    return (f"Deterministic score {ev['score']} -> {ev['tag']} / backbone {ev['backbone']}; "
+    note = (f"Deterministic score {ev['score']} -> {ev['tag']} / backbone {ev['backbone']}; "
             f"{ev['pipelines_called']}/{ev['pipelines_total']} pipeline(s) called.")
+    pen = ev.get("history_penalty")
+    pen_txt = f"−{pen:g}" if pen else "flag only"
+    if ev.get("project_predates"):
+        pp_date = str(ev["project_predates"].get("date", ""))[:10]
+        early = str(ev.get("earliest_commit", ""))[:10]
+        earliest = min(d for d in (pp_date, early) if d) if (pp_date or early) else "?"
+        note += (f" ⚠ FLAGGED: project history predates the event window (work goes back to "
+                 f"{earliest}; {pen_txt}, judge's call).")
+    if ev.get("history_tampered"):
+        t0 = ev["history_tampered"][0]
+        note += (f" ⚠ FLAGGED: commit-date rewrite detected ({t0['sha']}: authored "
+                 f"{str(t0['author'])[:10]}, re-stamped {str(t0['committer'])[:10]}; {pen_txt}, "
+                 f"judge's call).")
+    if ev.get("reused_pipelines"):
+        names = ", ".join(r["name"] for r in ev["reused_pipelines"][:3])
+        note += f" ⚠ REUSED PIPELINE(S) predating the event window: {names} (−1)."
+    return note
 
 
 # ---------------------------------------------------------------- gather (network; `gh` injected)
-def gather(url: str, gh) -> dict:
-    """Fetch a repo into an `evidence` dict. `gh(url) -> (status, text)`."""
+def gather(url: str, gh, event_date: str | None = None,
+           history_penalty: float | None = None) -> dict:
+    """Fetch a repo into an `evidence` dict. `gh(url) -> (status, text)`.
+    When `event_date` (YYYY-MM-DD) is given, each pipeline's first-commit date is fetched so
+    evaluate() can flag pre-existing (reused) pipelines against the event ± grace-day window.
+    `history_penalty` is the judge-set deduction for project-predates / tampered-history flags
+    (None -> DEFAULT_HISTORY_PENALTY; 0 = flag only)."""
     import run_batch as rb  # lazy: reuse repo helpers/constants without a hard import cycle
     pr = rb.parse_repo(url)
     if not pr:
@@ -369,7 +512,9 @@ def gather(url: str, gh) -> dict:
     st, body = gh(f"https://api.github.com/repos/{owner}/{repo}")
     if st != 200:
         return {"accessible": False, "status": st}
-    branch = json.loads(body).get("default_branch", "main")
+    meta = json.loads(body)
+    branch = meta.get("default_branch", "main")
+    created_at = meta.get("created_at", "")
     st, tbody = gh(f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1")
     if st != 200:
         return {"accessible": True, "fetch_incomplete": True, "note": f"tree fetch failed (HTTP {st})"}
@@ -419,6 +564,64 @@ def gather(url: str, gh) -> dict:
             called, sites = True, [runner_site]
         pe["called"], pe["call_sites"] = called, sites
 
+    # commit-history freshness (only when an event date was provided — one API call per pipe):
+    # earliest commit touching the pipe file, taking the older of author/committer date so a
+    # rebase can't hide pre-existing work.
+    win = event_window(event_date)
+    project_predates, tampered, earliest = None, [], ""
+    if win:
+        from urllib.parse import quote
+        for pe in pipes:
+            st, cbody = gh(f"https://api.github.com/repos/{owner}/{repo}/commits"
+                           f"?path={quote(pe['path'])}&per_page=100")
+            first = None
+            if st == 200:
+                try:
+                    commits = json.loads(cbody)
+                    if isinstance(commits, list) and commits:
+                        c = commits[-1].get("commit", {})          # newest-first → last = earliest
+                        dates = [c.get("author", {}).get("date", ""),
+                                 c.get("committer", {}).get("date", "")]
+                        first = min(d for d in dates if d) if any(dates) else None
+                except Exception:
+                    first = None
+            pe["first_commit"] = first
+        # WHOLE-PROJECT freshness: the entire project must be built inside the window. If ANY
+        # commit exists before the window start, the project predates the event (hard disqualifier).
+        st, cbody = gh(f"https://api.github.com/repos/{owner}/{repo}/commits"
+                       f"?until={win['start']}T00:00:00Z&per_page=1")
+        if st == 200:
+            try:
+                lst = json.loads(cbody)
+                if isinstance(lst, list) and lst:
+                    c = lst[0].get("commit", {})
+                    dates = [(c.get("author") or {}).get("date", ""),
+                             (c.get("committer") or {}).get("date", "")]
+                    d = min((x for x in dates if x), default="")
+                    if d:
+                        project_predates = {"date": d, "sha": (lst[0].get("sha") or "")[:7]}
+            except Exception:
+                project_predates = None
+        # TAMPER scan: author-vs-committer date evidence of history rewriting (hard disqualifier)
+        st, cbody = gh(f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=100")
+        if st == 200:
+            try:
+                tampered, earliest = history_tamper_scan(json.loads(cbody), win)
+            except Exception:
+                tampered, earliest = [], ""
+
+    # README — the repo's own title/head, used to label projects better than the repo slug
+    readme_title, readme_head = "", ""
+    readmes = sorted([p for p in paths if re.fullmatch(r"readme\.(md|rst|txt)", p, re.I)],
+                     key=len) or sorted([p for p in paths if p.lower().endswith("/readme.md")], key=len)
+    if readmes:
+        head_lines = raw(readmes[0]).splitlines()[:60]
+        readme_head = "\n".join(head_lines)
+        for ln in head_lines:
+            if ln.strip().startswith("# "):
+                readme_title = ln.strip().lstrip("# ").strip()
+                break
+
     scaffold = any(p.endswith(".claude/rules/rocketride.md") for p in paths)
     return {
         "accessible": True, "file_count": len(paths),
@@ -426,4 +629,9 @@ def gather(url: str, gh) -> dict:
         "other_platforms": sorted(others),
         "scaffold_only": scaffold and not (dependency or pipes),
         "sdk": sdk_metrics(source_files),
+        "event_window": win, "repo_created_at": created_at,
+        "history_penalty": history_penalty,
+        "project_predates": project_predates, "history_tampered": tampered,
+        "earliest_commit": earliest,
+        "readme_title": readme_title, "readme_head": readme_head,
     }

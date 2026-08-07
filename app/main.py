@@ -20,7 +20,7 @@ from io import BytesIO
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -62,6 +62,8 @@ class Repo(BaseModel):
 
 class VerifyRequest(BaseModel):
     repos: list[Repo]
+    event_date: str | None = None      # hackathon date (YYYY-MM-DD) → commit-freshness check
+    history_penalty: float | None = None  # judge-set deduction for predates/tamper flags (0 = flag only)
 
 
 def _ndjson(obj: dict) -> bytes:
@@ -103,9 +105,11 @@ def _public(r: dict) -> dict:
         "project", "github", "tag", "backbone", "description", "rocketride_usage",
         "justification", "notes", "evidence", "seconds", "demo", "deployed",
         "names", "emails", "repo_accessible", "classify_failed",
-        # deterministic evaluation payload (ground-truth table + score)
+        # deterministic evaluation payload (ground-truth table + score + freshness/integrity)
         "score", "pipelines", "breakdown", "pipelines_called", "pipelines_total",
-        "other_platforms", "explain_failed")}
+        "other_platforms", "explain_failed", "event_window", "reused_pipelines",
+        "project_predates", "history_tampered", "earliest_commit", "repo_created_at",
+        "history_penalty")}
     out["layers"] = _layers(r)
     return out
 
@@ -115,7 +119,8 @@ def _summary(results: list) -> dict:
             "backbone": dict(Counter(r.get("backbone", "?") for r in results))}
 
 
-async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY):
+async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY,
+                      event_date: str | None = None, history_penalty: float | None = None):
     """Shared NDJSON generator for live + batch. Repos are verified CONCURRENTLY (up to
     `concurrency` at a time); each verify_row's stage/result events are merged into one output
     stream via a queue, so a large batch finishes ~concurrency-times faster than one-at-a-time.
@@ -129,7 +134,7 @@ async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY):
     async def worker(i: int, row: dict):
         try:
             async with sem:
-                async for kind, payload in verify_row(row, pool):
+                async for kind, payload in verify_row(row, pool, event_date, history_penalty):
                     await q.put((kind, i, payload))
         except Exception as e:  # noqa: BLE001 — surface a failed row rather than hang the batch
             await q.put(("result", i, {**row, "repo_accessible": True, "classify_failed": True,
@@ -162,21 +167,39 @@ async def index():
 async def verify_stream(req: VerifyRequest):
     rows = [{"project": r.project or "", "github": r.github, "feedback": r.feedback or "",
              "demo": r.demo or "", "deployed": r.deployed or ""} for r in req.repos]
-    return StreamingResponse(_run_stream(rows), media_type="application/x-ndjson")
+    rb.fill_project_labels(rows)
+    return StreamingResponse(_run_stream(rows, event_date=req.event_date,
+                                         history_penalty=req.history_penalty),
+                             media_type="application/x-ndjson")
 
 
 @app.post("/api/batch")
-async def batch(file: UploadFile = File(...)):
+async def batch(file: UploadFile = File(...), event_date: str | None = Form(None),
+                history_penalty: float | None = Form(None)):
     suffix = Path(file.filename or "upload.csv").suffix or ".csv"
     tmp = Path(tempfile.gettempdir()) / f"rr_upload_{uuid.uuid4().hex[:8]}{suffix}"
     tmp.write_bytes(await file.read())
     try:
-        rows = rb.load_rows(str(tmp))
-    except SystemExit as e:                 # load_rows exits on an unreadable file
+        raw = rb.read_raw(str(tmp))
+    except SystemExit as e:                 # unreadable / unsupported file
         raise HTTPException(400, f"Could not read submissions file: {e}")
+    header_row, idx = rb.locate_columns(raw)
+    if header_row is not None:
+        rows = rb.build_rows(raw, header_row, idx)
+    else:
+        # deterministic detection failed → the LLM "sheet brain" maps the columns from the data
+        # patterns, and its answer is verified deterministically before any row is used.
+        answer = await pool.ask(rb.llm_mapping_prompt(raw))
+        rows = rb.apply_llm_mapping(raw, answer)
+        if rows is None:
+            raise HTTPException(400, f"Could not read submissions file: {rb._no_columns_error(raw)} "
+                                     "(LLM column mapping also failed to find a GitHub column.)")
     if not rows:
         raise HTTPException(400, "No rows found in the uploaded file.")
-    return StreamingResponse(_run_stream(rows), media_type="application/x-ndjson")
+    rb.fill_project_labels(rows)
+    return StreamingResponse(_run_stream(rows, event_date=event_date,
+                                         history_penalty=history_penalty),
+                             media_type="application/x-ndjson")
 
 
 class ExportRequest(BaseModel):

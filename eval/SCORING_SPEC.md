@@ -44,12 +44,21 @@ an inline pipeline object, or `rocketride start`.
 | C4 | **hosted-pipeline usage** (`ROCKETRIDE_PIPELINE_*` / `ROCKETRIDE_*_URL/WEBHOOK/ENDPOINT` env, or a `lib/rocketride` adapter — a bare `ROCKETRIDE_API_KEY` is only auth and does NOT count) | yes | **+1.0** |
 | — | **Real engine/webhook call** (`ws://localhost:5565`, `/v1/pipelines`, the hosted API host `api.rocketride.ai`, or a deployed-pipeline webhook URL) counts as genuine invocation (waives the B2 penalty + drives backbone), incl. SDK-less HTTP from any language. | | |
 
-## D. Disqualifiers / caps
+## D. Disqualifiers / caps / event-integrity flags
 | # | Rule | Effect |
 |---|---|---|
 | D1 | **scaffold only** (`.claude/rules/rocketride.md`, no dep/pipe/call) | Tag capped at **Less** |
 | D2 | **overclaim** (feedback claims RocketRide, zero code evidence) | force **None** |
 | D3 | **inaccessible** (repo 404 / private) | force **None**, flag for review |
+| D4 | **reused pipeline** — a CALLED pipeline first committed before the event window (event date ± 2 days; only checked when an event date is set) | **−1.0** flat + ⚠ flag, "Built on" shown per pipeline |
+| D5 | **project predates event** — ANY commit before the window start (old project + event-day commits; `?until=` query, so repo age can't hide it) | **−(judge-set penalty)** + loud ⚠ flag showing earliest commit + latest pre-window commit |
+| D6 | **history tampered** — a commit's committer date is in/after the window but its author date is older (git's own record of a rebase/amend re-stamp) | **−(judge-set penalty)** + loud ⚠ flag with sha + both dates |
+
+**Judge-set history penalty** (D5/D6): configurable per run (UI "Pre-event work penalty", CLI
+`--history-penalty`; default **2.0**). `0` = flag only; a large value effectively disqualifies. The
+verdict is never auto-forced — the deduction runs through the normal score → tag thresholds, so the
+call stays with the judges. *Limit:* a forger who rewrites both git dates in a fresh repo leaves no
+metadata trace — cloud run-telemetry (Phase 2) is the airtight check.
 
 ---
 
