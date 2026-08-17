@@ -1,5 +1,5 @@
 """
-Batch feeder for the hackathon usage verifier — HYBRID architecture.
+Batch feeder for the hackathon usage verifier - HYBRID architecture.
 
 Python gathers the GitHub evidence (complete, no truncation, fast); the RocketRide
 pipeline (chat -> Claude -> answer) applies the rubric and writes the verdict.
@@ -61,7 +61,7 @@ def _norm(s: str) -> str:
 
 def _resolve_headers(headers: list) -> dict:
     """Map CSV/XLSX headers to canonical fields. Two passes: exact alias match first
-    (reliable), then substring — but substring only uses aliases >=5 chars so a short,
+    (reliable), then substring - but substring only uses aliases >=5 chars so a short,
     generic alias like 'name' can't grab 'Team Members Names' or 'repo' grab 'Reporting'."""
     mapping = {}
     normed = [(h, _norm(h)) for h in headers]
@@ -158,7 +158,7 @@ def read_raw(path: str) -> list:
             with open(p, encoding="utf-8-sig", newline="") as f:
                 raw = [r for r in csv.reader(f) if any(c.strip() for c in r)]
         except UnicodeDecodeError:
-            # some exports are Windows-encoded (cp1252), not UTF-8 — fall back
+            # some exports are Windows-encoded (cp1252), not UTF-8 - fall back
             with open(p, encoding="cp1252", newline="") as f:
                 raw = [r for r in csv.reader(f) if any(c.strip() for c in r)]
     elif ext in (".xlsx", ".xlsm", ".xls"):
@@ -184,7 +184,7 @@ def locate_columns(raw: list):
         if sum(1 for c in raw[hr] if str(c).strip()) < max(2, (width + 1) // 2):
             continue                              # too few filled cells -> a banner/title row, skip it
         m = _resolve_columns([str(h).strip() for h in raw[hr]], raw[hr + 1:hr + 31])
-        if "github" in m:                         # a GitHub column is enough — the project/team label
+        if "github" in m:                         # a GitHub column is enough - the project/team label
             return hr, m                          # is optional and derived from the repo name when absent
     return None, {}
 
@@ -218,7 +218,7 @@ def load_rows(path: str) -> list:
 
 # ---- LLM column-mapping fallback (the "sheet brain") -------------------------
 # Deterministic detection runs FIRST and is authoritative. Only when it can't find a GitHub
-# column do we ask the cloud LLM to map columns from a sample of the sheet — and its answer is
+# column do we ask the cloud LLM to map columns from a sample of the sheet - and its answer is
 # then VERIFIED deterministically (the claimed github column must really contain github URLs),
 # so the LLM can locate columns but can never invent data. Verdict scoring stays deterministic.
 
@@ -235,7 +235,7 @@ def llm_mapping_prompt(raw: list) -> str:
         "  - names / emails / feedback / demo / deployed: if clearly present\n"
         "Also identify header_row: the 0-indexed row where headers sit (-1 if there is no header "
         "row and data starts at row 0).\n\n"
-        'Reply with ONLY a strict JSON object, e.g. {"header_row": 0, "github": 2, "project": 0} — '
+        'Reply with ONLY a strict JSON object, e.g. {"header_row": 0, "github": 2, "project": 0} - '
         "column indexes as integers, omit roles you cannot find, no prose."
     )
 
@@ -270,14 +270,14 @@ def apply_llm_mapping(raw: list, text: str) -> list | None:
 
 
 def title_upgrades(repo_name: str, title: str) -> bool:
-    """A README title improves on a repo-slug label only when it isn't just the slug re-spelled —
+    """A README title improves on a repo-slug label only when it isn't just the slug re-spelled -
     a title identical to the repo name would drop the owner suffix and re-collide duplicates."""
     return bool(title) and _norm(title) != _norm(repo_name)
 
 
 def fill_project_labels(rows: list) -> None:
     """Give every row a project label. Sheet-provided names always win; otherwise fall back to the
-    repo name — and when two DIFFERENT repos share a basename, disambiguate with the owner
+    repo name - and when two DIFFERENT repos share a basename, disambiguate with the owner
     ('hopper (vraj00222)') so distinct projects never collapse into one label. Rows labelled from
     the repo are marked _label_from_repo so the README title can upgrade them later."""
     for r in rows:
@@ -332,7 +332,7 @@ def is_failed(res: dict) -> bool:
     return res.get("repo_accessible") is not True or bool(res.get("classify_failed"))
 
 
-# ---- GitHub evidence gathering (Python — reliable, no truncation) ------------
+# ---- GitHub evidence gathering (Python - reliable, no truncation) ------------
 
 def github_token() -> str:
     t = os.environ.get("ROCKETRIDE_GITHUB_TOKEN")
@@ -375,7 +375,7 @@ def parse_repo(url: str):
     return (m.group(1), m.group(2).removesuffix(".git")) if m else None
 
 
-# Strong signals only — a bare "rocketride" mention (e.g. in a generic pipeline.js
+# Strong signals only - a bare "rocketride" mention (e.g. in a generic pipeline.js
 # lookalike) is NOT counted; require real SDK/engine usage OR hosted-pipeline usage.
 SRC_PATS = ["rocketrideclient", "client.use(", "client.chat(", "ws://localhost:5565",
             "/v1/pipelines", "@rocketride/sdk", "from rocketride", "import rocketride",
@@ -384,7 +384,7 @@ SRC_PATS = ["rocketrideclient", "client.use(", "client.chat(", "ws://localhost:5
             "rocketride_pipeline", "rocketride_api_key", "rocketride_apikey",
             "rocketride_uri", "lib/rocketride", "/rocketride'", '/rocketride"']
 
-# Other major platforms — used to judge (from code, not feedback) whether RocketRide is the
+# Other major platforms - used to judge (from code, not feedback) whether RocketRide is the
 # sole backbone (Yes) or sits alongside/beneath another platform (Partial).
 OTHER_PLATFORMS = ["butterbase", "supabase", "xtrace", "photon", "langchain",
                    "crewai", "firebase", "pinecone", "weaviate"]
@@ -404,7 +404,7 @@ def fetch_signals(url: str) -> dict:
 
     st, tbody = _gh(f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1")
     if st != 200:
-        # repo is reachable but we couldn't read its file tree — do NOT silently
+        # repo is reachable but we couldn't read its file tree - do NOT silently
         # conclude None on empty evidence; flag it for resubmit instead.
         return {"accessible": True, "fetch_incomplete": True,
                 "note": f"repo reachable but file-tree fetch failed (HTTP {st})"}
@@ -456,7 +456,7 @@ def fetch_signals(url: str) -> dict:
     }
 
 
-# LEGACY — the semantic LLM rubric that used to DECIDE the verdict. No longer used: the tag/backbone
+# LEGACY - the semantic LLM rubric that used to DECIDE the verdict. No longer used: the tag/backbone
 # are now computed deterministically in eval/engine.py, and the LLM only writes prose. Kept for
 # reference / rollback; safe to delete once the deterministic path has run a live event.
 RUBRIC = (
@@ -471,7 +471,7 @@ RUBRIC = (
     "PRIMACY IS THE DECIDING QUESTION. First judge whether RocketRide is the primary orchestrator, "
     "then couple the tag to that.\n"
     "Backbone (pick one): 'Yes' = RocketRide runs the project's core AI / orchestration / pipeline "
-    "logic — this is the PRIMARY backbone and the DEFAULT whenever RocketRide is the AI engine, EVEN "
+    "logic - this is the PRIMARY backbone and the DEFAULT whenever RocketRide is the AI engine, EVEN "
     "IF another platform (Butterbase, Supabase, etc.) handles the database, model gateway, storage, "
     "or messaging. Handling data or the gateway does NOT demote RocketRide from 'Yes'. 'Partial' = "
     "ONLY when RocketRide is genuinely scoped to a single sub-feature while another platform runs the "
@@ -482,11 +482,11 @@ RUBRIC = (
     "HOSTED RocketRide pipelines called by id via the API / ROCKETRIDE_PIPELINE_ env + a rocketride "
     "adapter, OR RocketRideClient / live engine calls) AND RocketRide is the PRIMARY or CO-primary "
     "orchestrator (backbone Yes or Partial). 'Moderate' = real RocketRide artifacts exist (a .pipe or "
-    "an integration) BUT RocketRide is NOT a primary orchestrator — another platform clearly runs the "
+    "an integration) BUT RocketRide is NOT a primary orchestrator - another platform clearly runs the "
     "project (backbone No). 'Less' = RocketRide present only as branding/scaffold or explicitly "
     "disabled, no real artifacts. 'None' = no real usage, OR overclaimed (feedback claims RocketRide "
     "but the evidence shows none), OR inaccessible.\n"
-    "DECISION RULE — apply strictly:\n"
+    "DECISION RULE - apply strictly:\n"
     "1. No RocketRide signals at all -> 'None' / backbone 'No'. Only a lone bare mention, branding, or "
     "claude_scaffold_only=true -> 'Less' / backbone 'No'.\n"
     "2. Otherwise RocketRide is really used. Judge PRIMACY from the evidence + other_platforms: is "
@@ -513,11 +513,11 @@ RUBRIC = (
     "'rocketride'; 'No' = neither.\n\n"
     "Output ONLY one strict JSON object (start with { and end with }), with these keys: "
     "repo_accessible (true), description (one plain-English sentence of what the project does), "
-    "rocketride_usage (plain English: where RocketRide sits and what it does for the project — "
+    "rocketride_usage (plain English: where RocketRide sits and what it does for the project - "
     "role and benefit, NOT file names), tag, backbone, justification (2-3 sentences explaining WHY "
-    "this specific tag AND backbone were assigned — cite the concrete signals found and the primacy "
+    "this specific tag AND backbone were assigned - cite the concrete signals found and the primacy "
     "reasoning: why Significant vs Moderate/Less/None, and why Yes vs Partial vs No), "
-    "layers (an object with EXACTLY the keys ingest, retrieval, orchestration, reasoning, output — "
+    "layers (an object with EXACTLY the keys ingest, retrieval, orchestration, reasoning, output - "
     "each set to 'rocketride', 'other', or 'none' as defined above), notes (any "
     "extra caveats: overclaim, hidden usage, fallback, duplicate, etc.), evidence (array of short "
     "strings taken from the provided evidence). Keep description, rocketride_usage, and "
@@ -539,9 +539,9 @@ async def verify_one(client, token, row, sem, event_date=None, history_penalty=N
     if repo_missing(url):
         return {**row, **engine.ZERO_EVAL, "repo_accessible": False, "description": "",
                 "rocketride_usage": "", "tag": "None", "backbone": "No", "classify_failed": False,
-                "notes": "No GitHub repo provided — flag for correction; scored as ZERO",
+                "notes": "No GitHub repo provided - flag for correction; scored as ZERO",
                 "justification": "No GitHub repository was provided in the submission, so RocketRide "
-                "usage cannot be verified from code — classified None / No and flagged for "
+                "usage cannot be verified from code - classified None / No and flagged for "
                 "correction (score zero).",
                 "evidence": [], "seconds": 0.0}
 
@@ -550,19 +550,19 @@ async def verify_one(client, token, row, sem, event_date=None, history_penalty=N
     if not evidence.get("accessible"):
         return {**row, **engine.ZERO_EVAL, "repo_accessible": False, "description": "",
                 "rocketride_usage": "", "tag": "None", "backbone": "No", "classify_failed": False,
-                "notes": f"INACCESSIBLE (HTTP {evidence.get('status', '?')}) — flag for correction: "
+                "notes": f"INACCESSIBLE (HTTP {evidence.get('status', '?')}) - flag for correction: "
                          "double-check the repo URL; scored as ZERO",
                 "justification": f"The repository could not be accessed (HTTP "
-                f"{evidence.get('status', '?')}), so RocketRide usage cannot be verified from code — "
+                f"{evidence.get('status', '?')}), so RocketRide usage cannot be verified from code - "
                 "classified None / No and flagged for correction (score zero).",
                 "evidence": [], "seconds": round(time.perf_counter() - started, 1)}
 
     if evidence.get("fetch_incomplete"):
         return {**row, **engine.ZERO_EVAL, "repo_accessible": None, "description": "",
                 "rocketride_usage": "", "tag": "None", "backbone": "No", "classify_failed": False,
-                "notes": f"Evidence fetch incomplete ({evidence.get('note', '')}) — resubmit this row",
+                "notes": f"Evidence fetch incomplete ({evidence.get('note', '')}) - resubmit this row",
                 "justification": "Evidence gathering was incomplete this run, so classification was "
-                "deferred — resubmit this row.",
+                "deferred - resubmit this row.",
                 "evidence": [], "seconds": round(time.perf_counter() - started, 1)}
 
     # a repo-slug label upgrades to the README's own title (sheet-provided names never touched;
@@ -573,7 +573,7 @@ async def verify_one(client, token, row, sem, event_date=None, history_penalty=N
         project = evidence["readme_title"][:80]
         row = {**row, "project": project}
 
-    # DETERMINISTIC verdict — identical to the web app; no LLM decides the tag
+    # DETERMINISTIC verdict - identical to the web app; no LLM decides the tag
     ev = engine.evaluate(evidence)
 
     # cloud pipeline writes ONLY the prose explanation (verdict is already fixed)
@@ -590,8 +590,8 @@ async def verify_one(client, token, row, sem, event_date=None, history_penalty=N
             try:
                 resp = await asyncio.wait_for(client.chat(token=token, question=q), timeout=90)
             except asyncio.TimeoutError:
-                continue                               # classifier hung — retry
-            except Exception:  # noqa: BLE001 — keep the deterministic verdict, skip the prose
+                continue                               # classifier hung - retry
+            except Exception:  # noqa: BLE001 - keep the deterministic verdict, skip the prose
                 break
             answers = resp.get("answers", []) if isinstance(resp, dict) else []
             prose = engine.extract_prose(answers[0] if answers else "")
@@ -619,9 +619,9 @@ async def verify_one(client, token, row, sem, event_date=None, history_penalty=N
         "description": prose.get("description", ""),
         "rocketride_usage": prose.get("rocketride_usage", ""),
         "justification": (prose.get("justification", "") if not explain_failed
-                          else f"{note} (Plain-English explanation unavailable this run — the "
+                          else f"{note} (Plain-English explanation unavailable this run - the "
                                "deterministic verdict stands; see the evidence table.)"),
-        "notes": note + (" [explanation pending — cloud classifier unreachable]" if explain_failed else ""),
+        "notes": note + (" [explanation pending - cloud classifier unreachable]" if explain_failed else ""),
         "evidence": engine.evidence_lines(ev),
         "seconds": elapsed,
     }
@@ -640,7 +640,7 @@ async def _llm_map_columns(raw: list):
         resp = await asyncio.wait_for(client.chat(token=token, question=q), timeout=60)
         answers = resp.get("answers", []) if isinstance(resp, dict) else []
         return apply_llm_mapping(raw, answers[0] if answers else "")
-    except Exception:  # noqa: BLE001 — cloud unreachable -> caller falls back to the plain error
+    except Exception:  # noqa: BLE001 - cloud unreachable -> caller falls back to the plain error
         return None
     finally:
         if token:
@@ -751,15 +751,15 @@ def style_row(ws, row_i: int, r: dict) -> None:
         ws.cell(row=row_i, column=5).fill = PatternFill("solid", fgColor=TAG_FILL[tag])
     if bb in BACKBONE_FILL:
         ws.cell(row=row_i, column=6).fill = PatternFill("solid", fgColor=BACKBONE_FILL[bb])
-    # event-integrity flags (reused pipeline / project predates / date rewrite) — make the row shout
+    # event-integrity flags (reused pipeline / project predates / date rewrite) - make the row shout
     if r.get("reused_pipelines") or r.get("project_predates") or r.get("history_tampered"):
         ws.cell(row=row_i, column=8).fill = PatternFill("solid", fgColor="FFC7CE")
         ws.cell(row=row_i, column=8).font = Font(bold=True, color="9C0006")
     for col in (1, 2, 3, 4, 8, 9, 14):        # 14 = Pipeline Evidence (multi-line table)
         ws.cell(row=row_i, column=col).alignment = WRAP
-    for col in (12, 13):                       # Score, Pipelines (Called/Total) — centered
+    for col in (12, 13):                       # Score, Pipelines (Called/Total) - centered
         ws.cell(row=row_i, column=col).alignment = Alignment(horizontal="center", vertical="top")
-    for col in (7, 10, 11):  # GitHub Link, Demo/Presentation, Deployed URL — clickable
+    for col in (7, 10, 11):  # GitHub Link, Demo/Presentation, Deployed URL - clickable
         _link_cell(ws, row_i, col)
 
 
@@ -855,7 +855,7 @@ def main() -> None:
     ap.add_argument("--out", help="output path (default: new sheet, or the --merge file)")
     ap.add_argument("--concurrency", type=int, default=2)
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--event-date", help="hackathon date YYYY-MM-DD — flags/penalises pipelines "
+    ap.add_argument("--event-date", help="hackathon date YYYY-MM-DD - flags/penalises pipelines "
                     f"whose commit history starts before the event ± {engine.EVENT_GRACE_DAYS} days")
     ap.add_argument("--history-penalty", type=float, default=None,
                     help=f"judge-set deduction for predates/tamper flags (default "
@@ -868,7 +868,7 @@ def main() -> None:
     if header_row is not None:
         rows = build_rows(raw, header_row, idx)
     else:
-        print("Deterministic column detection failed — asking the cloud LLM to map the columns...")
+        print("Deterministic column detection failed - asking the cloud LLM to map the columns...")
         rows = asyncio.run(_llm_map_columns(raw))
         if rows is None:
             sys.exit(_no_columns_error(raw))

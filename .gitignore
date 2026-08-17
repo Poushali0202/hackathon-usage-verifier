@@ -17,3 +17,10 @@ venv/
 .DS_Store
 Thumbs.db
 *.swp
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+# local dev database
+hackjudge.db

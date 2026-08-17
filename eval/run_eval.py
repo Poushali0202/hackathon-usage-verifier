@@ -26,7 +26,14 @@ def run_fixtures() -> int:
     print(f"Deterministic evaluator — {len(fixtures)} fixture(s)\n" + "-" * 68)
     for fp in fixtures:
         spec = json.loads(fp.read_text(encoding="utf-8"))
-        got = engine.evaluate(spec["evidence"])
+        # a fixture may carry a user-defined target (Targets-editor config shape) — it then runs
+        # through the target-agnostic generic path instead of the RocketRide preset path
+        tgt = None
+        if spec.get("target_ui_config"):
+            from target import Target
+            tc = spec["target_ui_config"]
+            tgt = Target.from_ui_config(tc.get("name", "TestTarget"), tc)
+        got = engine.evaluate(spec["evidence"], tgt)
         exp = spec["expect"]
         diffs = {k: (v, got.get(k)) for k, v in exp.items() if got.get(k) != v}
         ok = not diffs

@@ -1,0 +1,32 @@
+{
+  "name": "generic target (fictional BaaS 'AcmeCloud') — deep integration scores Significant, competitor demotes nothing here",
+  "target_ui_config": {
+    "name": "AcmeCloud",
+    "types": ["code", "platform"],
+    "dependency_names": "@acmecloud/sdk",
+    "invocation": "createAcme | api.acmecloud.io/v1/",
+    "hosted_markers": "ACMECLOUD_API_KEY, ACMECLOUD_APP_ID",
+    "platform_domains": "*.acmecloud.app",
+    "platform_files": ".acmecloud/config.json",
+    "platform_markers": "ac_sk_",
+    "competitors": "supabase",
+    "neutral": "cloudflare"
+  },
+  "evidence": {
+    "accessible": true,
+    "file_count": 60,
+    "dependency": true,
+    "pipes": [],
+    "other_platforms": [],
+    "sdk": { "callsites": 9, "file_spread": 4, "hosted": true, "engine": true },
+    "platform": {
+      "domains": ["acmecloud.app"],
+      "markers": ["ac_sk_", "acmecloud_api_key"],
+      "files": [".acmecloud/config.json"]
+    },
+    "event_window": null,
+    "readme_title": "Demo App",
+    "readme_head": ""
+  },
+  "expect": { "tag": "Significant", "backbone": "Yes", "score": 8.5 }
+}

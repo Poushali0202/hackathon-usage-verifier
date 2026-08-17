@@ -109,12 +109,13 @@ class ClassifierPool:
                 pass
 
     async def explain(self, evaluation: dict, project: str, repo: str, feedback: str,
-                      readme_head: str = "") -> dict:
+                      readme_head: str = "", target_name: str = "RocketRide") -> dict:
         """Put the DETERMINISTIC verdict into plain English for a judge. Returns prose only
         (description / rocketride_usage / justification, plus README-stated project_name /
-        team_members) — it never sets the tag/backbone. Returns {"explain_failed": True} if the
+        team_members) - it never sets the tag/backbone. Returns {"explain_failed": True} if the
         cloud classifier can't be reached; the verdict still stands."""
-        prompt = engine.explain_prompt(evaluation, project, repo, feedback, readme_head)
+        prompt = engine.explain_prompt(evaluation, project, repo, feedback, readme_head,
+                                       target_name=target_name)
         async with self._sem:
             parsed: dict = {}
             for attempt in range(3):
@@ -129,9 +130,9 @@ class ClassifierPool:
                                   prompt + "\n\nREMINDER: reply with ONLY the strict JSON object.")
                     resp = await asyncio.wait_for(client.chat(token=token, question=q), timeout=90)
                 except asyncio.TimeoutError:
-                    continue                       # classifier hung — retry
+                    continue                       # classifier hung - retry
                 except Exception:
-                    await self._reset()            # socket/token died — rebuild next attempt
+                    await self._reset()            # socket/token died - rebuild next attempt
                     continue
                 answers = resp.get("answers", []) if isinstance(resp, dict) else []
                 parsed = engine.extract_prose(answers[0] if answers else "")
@@ -177,34 +178,34 @@ _ZERO = {"score": 0.0, "pipelines": [], "breakdown": [], "pipelines_called": 0,
          "pipelines_total": 0, "other_platforms": [], "explain_failed": False,
          "classify_failed": False, "event_window": None, "reused_pipelines": [],
          "project_predates": None, "history_tampered": [], "earliest_commit": "",
-         "repo_created_at": "", "history_penalty": None}
+         "repo_created_at": "", "history_penalty": None, "platform": {}, "tech": []}
 
 
 def _no_repo(row: dict) -> dict:
     return {**row, **_ZERO, "repo_accessible": False, "description": "", "rocketride_usage": "",
             "tag": "None", "backbone": "No",
-            "notes": "No GitHub repo provided — flag for correction; scored as ZERO",
+            "notes": "No GitHub repo provided - flag for correction; scored as ZERO",
             "justification": "No GitHub repository was provided in the submission, so RocketRide "
-            "usage cannot be verified from code — classified None / No and flagged for correction "
+            "usage cannot be verified from code - classified None / No and flagged for correction "
             "(score zero).", "evidence": []}
 
 
 def _inaccessible(row: dict, sig: dict) -> dict:
     return {**row, **_ZERO, "repo_accessible": False, "description": "", "rocketride_usage": "",
             "tag": "None", "backbone": "No",
-            "notes": f"INACCESSIBLE (HTTP {sig.get('status', '?')}) — flag for correction: "
+            "notes": f"INACCESSIBLE (HTTP {sig.get('status', '?')}) - flag for correction: "
             "double-check the repo URL; scored as ZERO",
             "justification": f"The repository could not be accessed (HTTP {sig.get('status', '?')}), "
-            "so RocketRide usage cannot be verified from code — classified None / No and flagged "
+            "so RocketRide usage cannot be verified from code - classified None / No and flagged "
             "for correction (score zero).", "evidence": []}
 
 
 def _incomplete(row: dict, sig: dict) -> dict:
     return {**row, **_ZERO, "repo_accessible": None, "description": "", "rocketride_usage": "",
             "tag": "None", "backbone": "No",
-            "notes": f"Evidence fetch incomplete ({sig.get('note', '')}) — resubmit this row",
+            "notes": f"Evidence fetch incomplete ({sig.get('note', '')}) - resubmit this row",
             "justification": "Evidence gathering was incomplete this run, so classification was "
-            "deferred — resubmit this row.", "evidence": []}
+            "deferred - resubmit this row.", "evidence": []}
 
 
 def _eval_summary(ev: dict) -> dict:
@@ -219,10 +220,11 @@ def _eval_summary(ev: dict) -> dict:
 
 
 async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = None,
-                     history_penalty: float | None = None):
+                     history_penalty: float | None = None,
+                     target: "engine.Target | None" = None):
     """Async generator: yields ('stage', {...}) events then a final ('result', {...}).
 
-    Stage A (fetch + measure) runs the DETERMINISTIC engine off the event loop — it gathers the repo
+    Stage A (fetch + measure) runs the DETERMINISTIC engine off the event loop - it gathers the repo
     and computes the verdict (tag/backbone/score + the ground-truth pipeline table, plus the
     commit-freshness check when `event_date` is given). Stage B asks the RocketRide Cloud pipeline
     only to EXPLAIN that verdict in prose. The verdict never depends on the LLM, so a slow/offline
@@ -242,9 +244,11 @@ async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = N
         yield "result", {**_no_repo(row), "seconds": 0.0}
         return
 
+    tname = target.name if target else "RocketRide"
     yield "stage", {"stage": "fetch", "engine": "local", "project": project,
-                    "message": "Gathering code + measuring pipelines — local Pipeline A"}
-    evidence = await asyncio.to_thread(engine.gather, url, rb._gh, event_date, history_penalty)
+                    "message": f"Gathering code + measuring {tname} usage - local Pipeline A"}
+    evidence = await asyncio.to_thread(engine.gather, url, rb._gh, event_date, history_penalty,
+                                       target)
 
     if not evidence.get("accessible"):
         yield "result", {**_inaccessible(row, evidence), "seconds": round(time.perf_counter() - started, 1)}
@@ -262,13 +266,14 @@ async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = N
         row = {**row, "project": project}
 
     # DETERMINISTIC verdict (no LLM): tag, backbone, score, and the ground-truth pipeline table
-    ev = engine.evaluate(evidence)
+    ev = engine.evaluate(evidence, target)
 
     yield "stage", {"stage": "classify", "engine": "cloud", "project": project,
-                    "message": "Explaining the verdict on RocketRide Cloud — Pipeline B",
+                    "message": "Explaining the verdict on RocketRide Cloud - Pipeline B",
                     "digest": _eval_summary(ev)}
     prose = await pool.explain(ev, project, url, row.get("feedback", ""),
-                               readme_head=evidence.get("readme_head", ""))
+                               readme_head=evidence.get("readme_head", ""),
+                               target_name=tname)
     explain_failed = bool(prose.get("explain_failed"))
 
     # README-stated names beat a repo-slug label / an empty team column (never a sheet-given value)
@@ -290,12 +295,14 @@ async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = N
         "project_predates": ev.get("project_predates"), "history_tampered": ev.get("history_tampered", []),
         "earliest_commit": ev.get("earliest_commit", ""), "repo_created_at": ev.get("repo_created_at", ""),
         "history_penalty": ev.get("history_penalty"),
+        "platform": ev.get("platform") or {}, "target_name": tname,
+        "tech": ev.get("tech", []),
         "description": prose.get("description", ""),
         "rocketride_usage": prose.get("rocketride_usage", ""),
         "justification": (prose.get("justification", "") if not explain_failed
-                          else f"{note} (Plain-English explanation unavailable this run — the "
+                          else f"{note} (Plain-English explanation unavailable this run - the "
                                "deterministic verdict stands; see the evidence table.)"),
-        "notes": note + (" [explanation pending — cloud classifier unreachable]" if explain_failed else ""),
+        "notes": note + (" [explanation pending - cloud classifier unreachable]" if explain_failed else ""),
         "evidence": engine.evidence_lines(ev),
         "seconds": round(time.perf_counter() - started, 1),
     }

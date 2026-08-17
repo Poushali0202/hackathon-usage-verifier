@@ -259,7 +259,7 @@
 
   <div class="inputs">
     <div class="ipanel glass" id="liveP">
-      <label class="fld" for="repos">GitHub repo URLs — one per line</label>
+      <label class="fld" for="repos">GitHub repo URLs - one per line</label>
       <textarea id="repos" placeholder="https://github.com/team/project&#10;https://github.com/another/repo"></textarea>
       <div class="row"><button class="btn" id="runLive">Run</button>
         <label class="fld" for="eventDate" style="margin:0">Hackathon date (required)</label>
@@ -268,7 +268,7 @@
         <input type="number" id="histPen" class="dateinp num" value="2" min="0" max="20" step="0.5" title="If a project's git commits are OLDER than the hackathon window (old project reused), or its commit dates look rewritten, deduct this many points from its score. 0 = just flag it, deduct nothing. A big number (10+) effectively disqualifies. Judge's choice." />
         <span class="hint">Each repo is fetched locally (A), then classified on RocketRide Cloud (B).
           Projects with git commits older than the hackathon date (±2 days) get flagged as pre-event work
-          and lose the penalty points you set (0 = flag only — judge's call).</span>
+          and lose the penalty points you set (0 = flag only - judge's call).</span>
         <span id="dlSlot"></span></div>
     </div>
     <div class="ipanel glass" id="batchP" style="display:none">
@@ -281,7 +281,7 @@
         <input type="number" id="histPen2" class="dateinp num" value="2" min="0" max="20" step="0.5" title="If a project's git commits are OLDER than the hackathon window (old project reused), or its commit dates look rewritten, deduct this many points from its score. 0 = just flag it, deduct nothing. A big number (10+) effectively disqualifies. Judge's choice." />
         <span class="hint">Runs the full sheet and builds the styled Excel with clickable links.
           Projects with git commits older than the hackathon date (±2 days) get flagged as pre-event work
-          and lose the penalty points you set (0 = flag only — judge's call).</span>
+          and lose the penalty points you set (0 = flag only - judge's call).</span>
         <span id="dlSlot2"></span></div>
     </div>
   </div>
@@ -332,7 +332,8 @@ function calloutInfo(key, raw){
 }
 function normLayers(L){
   const out={}; L=L||{};
-  for(const k of BASE2TOP){ const v=String(L[k]||'none').toLowerCase();
+  for(const k of BASE2TOP){ let v=String(L[k]||'none').toLowerCase();
+    if(v==='target') v='rocketride';   // neutral sentinel from the target-agnostic engine
     out[k]=['rocketride','other','none'].includes(v)?v:'none'; }
   return out;
 }
@@ -402,7 +403,7 @@ function renderCard(i, r){
   c.dataset.group=groupOf(r);
   if(rev){
     c.innerHTML=`<div class="top"><div class="nm">${esc(r.project)||'(unnamed)'}</div></div>
-      <div class="reviewtxt">⚠ ${(r.repo_accessible===true&&r.classify_failed)?'classification failed — re-run':'inaccessible — needs review'}</div>
+      <div class="reviewtxt">⚠ ${(r.repo_accessible===true&&r.classify_failed)?'classification failed - re-run':'inaccessible - needs review'}</div>
       <div class="meta"><span class="bb">Backbone ${esc(r.backbone||'No')}</span>${flagsHTML(r)}</div>`;
   } else {
     c.innerHTML=`<div class="top">${glyphHTML(r.layers)}
@@ -457,7 +458,7 @@ function renderDetail(r, digest){
       ${linkBtn(r.deployed,'Deployed','Not deployed')}
     </div></div>
     ${rev?`<div class="dsec"><p class="muted">${(r.repo_accessible===true&&r.classify_failed)
-        ?'The repository was read fine, but the classifier did not return a usable result on this run — usually a transient timeout on a very large repo. Re-run this row and it should classify.'
+        ?'The repository was read fine, but the classifier did not return a usable result on this run - usually a transient timeout on a very large repo. Re-run this row and it should classify.'
         :'This repository could not be accessed, so RocketRide usage could not be verified from code. Flagged for correction; scored as zero.'} ${esc(r.notes||'')}</p></div>`:`
     ${r.description?`<div class="dsec"><div class="eyebrow">Project description</div><p>${esc(r.description)}</p></div>`:''}
     ${r.rocketride_usage?`<div class="dsec"><div class="eyebrow">How RocketRide was used &amp; how it helped</div><p>${esc(r.rocketride_usage)}</p></div>`:''}
@@ -468,8 +469,8 @@ function renderDetail(r, digest){
         <span><i class="k-rr"></i> RocketRide</span><span><i class="k-off"></i> not RocketRide</span></div>
     </div>
     <div class="dsec"><div class="readhead" style="justify-content:space-between">
-        <div class="eyebrow">Deterministic evaluation — ground truth</div>
-        <span class="score">Score ${r.score??'–'} · ${r.pipelines_called??0}/${r.pipelines_total??0} pipelines called</span></div>
+        <div class="eyebrow">Deterministic evaluation - ground truth</div>
+        <span class="score">Score ${r.score??'-'} · ${r.pipelines_called??0}/${r.pipelines_total??0} pipelines called</span></div>
       <div class="ptblwrap">${pipeTable(r)}</div>
       ${historyHTML(r)}
       ${breakdownHTML(r)}
@@ -489,7 +490,7 @@ function pipeTable(r){
   const rows=ps.map(p=>{
     const sites=(p.call_sites||[]).map(s=>`${esc(s.file)}:${s.line}`).join('<br>');
     const called=p.called?'<span class="yes">&#10003; called</span>':'<span class="no">&#10007; for show</span>';
-    const fc=p.first_commit?String(p.first_commit).slice(0,10):'&mdash;';
+    const fc=p.first_commit?String(p.first_commit).slice(0,10):'-';
     const age=p.predates
       ?`<div class="agebad" title="Hackathon ${esc(win.event)}; allowed window ${esc(win.start)} &rarr; ${esc(win.end)}">&#9888; ${fc}</div>`+
        `<div class="agesub">built before the event window ${esc(win.start)} &rarr; ${esc(win.end)} &middot; &minus;1</div>`
@@ -497,7 +498,7 @@ function pipeTable(r){
     return `<tr${p.predates?' class="reusedrow"':''}><td><code>${esc(p.name)}</code></td><td class="c">${p.nodes}</td>`+
       `<td class="c">${esc(p.complexity)}</td><td class="c">${p.has_agent?'agent':'&ndash;'}</td>`+
       `<td class="c">${called}</td>${showAge?`<td class="c">${age}</td>`:''}`+
-      `<td class="sites">${sites||'<span class="muted">&mdash;</span>'}</td></tr>`;
+      `<td class="sites">${sites||'<span class="muted">-</span>'}</td></tr>`;
   }).join('');
   return `<table class="ptbl"><thead><tr><th>Pipeline</th><th>Nodes</th><th>Complexity</th>`+
     `<th>Type</th><th>Called?</th>${showAge?'<th>Built on</th>':''}<th>Call sites (proof)</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -509,19 +510,19 @@ function historyHTML(r){
   const cr=r.repo_created_at?String(r.repo_created_at).slice(0,10):null;
   let s=`<div class="hist">Repo history: earliest commit seen <b>${ec?esc(ec):'?'}</b>`+
         `${cr?` &middot; repo created ${esc(cr)}`:''} &middot; allowed window ${esc(win.start)} &rarr; ${esc(win.end)}</div>`;
-  const pen=r.history_penalty, penTxt=(pen&&pen>0)?`&minus;${pen} penalty applied (judge-set)`:'no deduction &mdash; flag only (judge-set)';
+  const pen=r.history_penalty, penTxt=(pen&&pen>0)?`&minus;${pen} penalty applied (judge-set)`:'no deduction - flag only (judge-set)';
   if(r.project_predates){
     const pp=r.project_predates, ppd=String(pp.date||'').slice(0,10);
     const earliest=(ec&&(!ppd||ec<=ppd))?ec:ppd;
-    s+=`<div class="dqline">&#9888; FLAGGED &mdash; project history predates the event window: `+
+    s+=`<div class="dqline">&#9888; FLAGGED - project history predates the event window: `+
        `work on this repo goes back to <b>${esc(earliest||'?')}</b> `+
        `(latest pre-window commit <code>${esc(pp.sha||'?')}</code> on ${esc(ppd||'?')}). `+
-       `Event was ${esc(win.event)} &plusmn;2 days. ${penTxt} &mdash; judge's call.</div>`;
+       `Event was ${esc(win.event)} &plusmn;2 days. ${penTxt} - judge's call.</div>`;
   }
   (r.history_tampered||[]).slice(0,3).forEach(t=>{
-    s+=`<div class="dqline">&#9888; FLAGGED &mdash; commit-date rewrite detected: `+
+    s+=`<div class="dqline">&#9888; FLAGGED - commit-date rewrite detected: `+
        `<code>${esc(t.sha)}</code> originally authored <b>${esc(String(t.author).slice(0,10))}</b> `+
-       `but re-stamped <b>${esc(String(t.committer).slice(0,10))}</b> into the window. ${penTxt} &mdash; judge's call.</div>`;
+       `but re-stamped <b>${esc(String(t.committer).slice(0,10))}</b> into the window. ${penTxt} - judge's call.</div>`;
   });
   return s;
 }
@@ -584,7 +585,7 @@ function showDownload(count){
   $('#dlSlot').innerHTML=html; $('#dlSlot2').innerHTML=html;
 }
 async function exportExcel(){
-  // Build the sheet from the results this browser already has — no server-side job to expire.
+  // Build the sheet from the results this browser already has - no server-side job to expire.
   const results=S.order.map(i=>S.items[i]).filter(r=>r&&r._result);
   if(!results.length) return;
   try{

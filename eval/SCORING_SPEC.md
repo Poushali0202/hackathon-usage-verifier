@@ -92,3 +92,25 @@ metadata trace — cloud run-telemetry (Phase 2) is the airtight check.
 | **dead-code + phantom hosted** (empty `.pipe`, never called, bare hosted env only) | **0.0** | **None / No** |
 | **scaffold-only** (`.claude/rules` only) | 0.0 | **Less** (capped) |
 | **hosted-only** (Cloud usage, no local pipe) | 3.0 | **Moderate / Yes** |
+
+## G. Target-agnostic generic path (M3)
+
+Any target that is not the RocketRide preset (`pipeline_scoring=false`) scores through a
+target-agnostic path driven entirely by its TargetConfig (eval/target.py; user configs are
+literal tokens, never raw regex). Signals and default weights:
+
+| Signal | Points | Fires when |
+|---|---|---|
+| dependency | 1.0 | a dependency name appears in a manifest |
+| invocation | 1.5 | >= 3 invocation call-sites in code |
+| invocation_deep | 1.0 | >= 8 call-sites |
+| api_usage | 1.5 | a runtime API host/path of the target is called |
+| hosted | 0.5 | env/key markers wire the target in |
+| file_spread | 0.5 | >= 2 files touch the target |
+| artifact | 1.0 | a target config file/dir is committed |
+| platform_deploy | 1.5 | a deploy-domain link in code/README |
+
+Thresholds identical (Significant 4.0 / Moderate 2.0 / Less 1.0); backbone Yes/Partial/No via
+the target's own competitor list; D5/D6 commit-history flags and the judge-set penalty apply
+unchanged. The RocketRide preset path is byte-identical to pre-M3 (fixture parity: all 10
+legacy fixtures + generic fixture `generic-target-baas.json`).
