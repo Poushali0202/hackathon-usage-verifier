@@ -1,28 +1,78 @@
 {
-	"components": [
-		{
-			"id": "chat_1",
-			"provider": "chat",
-			"config": { "hideForm": true, "mode": "Source", "parameters": {}, "type": "chat" }
-		},
-		{
-			"id": "llm_anthropic_1",
-			"provider": "llm_anthropic",
-			"config": {
-				"profile": "claude-sonnet-4-6",
-				"claude-sonnet-4-6": { "apikey": "${ROCKETRIDE_ANTHROPIC_KEY}" },
-				"parameters": {}
-			},
-			"input": [{ "lane": "questions", "from": "chat_1" }]
-		},
-		{
-			"id": "response_answers_1",
-			"provider": "response_answers",
-			"config": {},
-			"input": [{ "lane": "answers", "from": "llm_anthropic_1" }]
-		}
-	],
-	"project_id": "39eb5715-fd43-4e0c-ba86-3c66e302258e",
-	"viewport": { "x": 0, "y": 0, "zoom": 1 },
-	"version": 1
+  "components": [
+    {
+      "id": "chat_1",
+      "provider": "chat",
+      "name": "Chat",
+      "config": {
+        "hideForm": true,
+        "mode": "Source",
+        "parameters": {},
+        "type": "chat"
+      },
+      "ui": {
+        "position": {
+          "x": 12,
+          "y": 12
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      }
+    },
+    {
+      "id": "llm_anthropic_1",
+      "provider": "llm_anthropic",
+      "name": "Anthropic",
+      "config": {
+        "profile": "claude-sonnet-4-6",
+        "claude-sonnet-4-6": {
+          "apikey": "${ROCKETRIDE_ANTHROPIC_KEY}"
+        },
+        "parameters": {}
+      },
+      "ui": {
+        "position": {
+          "x": 242,
+          "y": 41
+        },
+        "nodeType": "default",
+        "formDataValid": true
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "chat_1"
+        }
+      ]
+    },
+    {
+      "id": "response_answers_1",
+      "provider": "response_answers",
+      "name": "Return Answers",
+      "config": {},
+      "ui": {
+        "position": {
+          "x": 472,
+          "y": 41
+        },
+        "nodeType": "default",
+        "formDataValid": false
+      },
+      "input": [
+        {
+          "lane": "answers",
+          "from": "llm_anthropic_1"
+        }
+      ]
+    }
+  ],
+  "project_id": "39eb5715-fd43-4e0c-ba86-3c66e302258e",
+  "version": 1,
+  "isLocked": false,
+  "snapToGrid": true,
+  "snapGridSize": [
+    10,
+    10
+  ],
+  "docRevision": 1
 }
