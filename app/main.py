@@ -36,6 +36,9 @@ from db.session import SessionLocal, init_db  # noqa: E402
 from target import Target as EngineTarget  # noqa: E402  (eval/ on sys.path via verifier_service)
 import extract as target_extract  # noqa: E402  ("Prefill from repo" - eval/extract.py)
 import engine  # noqa: E402  (target test dry-runs)
+from .node_api import JOBS as NODE_JOBS, create_job as node_create_job  # noqa: E402
+from .node_api import router as node_router  # noqa: E402
+import os  # noqa: E402
 from .authn import Identity, current_identity  # noqa: E402
 from .db_api import router as db_router  # noqa: E402
 from .runstate import ACTIVE as ACTIVE_RUNS  # noqa: E402
@@ -43,8 +46,12 @@ from fastapi import Depends  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
+DIST = PROJECT_ROOT / "frontend" / "dist"           # built React app (served when present)
 BATCH_CONCURRENCY = 4                    # how many repos to verify at once
 pool = ClassifierPool(max_concurrency=BATCH_CONCURRENCY)
+# M7 point 1: the in-node engine pipeline (agent + tool_python). Separate session so the
+# explain pipeline and the engine pipeline never contend for one token.
+repo_pool = ClassifierPool(pipe_path=str(PROJECT_ROOT / "verify_repo.pipe"), max_concurrency=4)
 
 
 @asynccontextmanager
@@ -55,13 +62,19 @@ async def lifespan(app: FastAPI):
         await pool.start()               # open the cloud classifier (Pipeline B)
     except Exception as e:               # noqa: BLE001 - don't block startup if cloud is down
         print(f"[warn] classifier not reachable at startup: {e} (will retry per request)")
+    try:
+        await repo_pool.start()          # warm the in-node engine pipeline (M7)
+    except Exception as e:               # noqa: BLE001
+        print(f"[warn] verify_repo pipeline not reachable at startup: {e} (will retry per request)")
     yield
     await pool.aclose()
+    await repo_pool.aclose()
 
 
 app = FastAPI(title="RocketRide Hackathon Usage Verifier", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")   # serves the branding bg image
 app.include_router(db_router)            # /api/targets CRUD + /api/runs (tenant-scoped)
+app.include_router(node_router)          # /api/node/* (in-node engine: bundle/job/result)
 
 
 class Repo(BaseModel):
@@ -255,6 +268,15 @@ async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY,
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
+    """Serve the built React app when present (Render/preview deploys); otherwise the
+    Phase-1 static UI, which also stays available at /legacy either way."""
+    if (DIST / "index.html").exists():
+        return (DIST / "index.html").read_text(encoding="utf-8")
+    return (STATIC / "index.html").read_text(encoding="utf-8")
+
+
+@app.get("/legacy", response_class=HTMLResponse)
+async def legacy_index():
     return (STATIC / "index.html").read_text(encoding="utf-8")
 
 
@@ -334,21 +356,52 @@ class TargetTestRequest(BaseModel):
     repo_url: str
     name: str = "Target"
     config: dict = {}
+    engine: str = "local"       # "cloud" = run the engine INSIDE verify_repo.pipe (M7)
+
+
+def _test_response(res: dict, engine_used: str) -> dict:
+    return {"tag": res["tag"], "score": res["score"], "backbone": res["backbone"],
+            "breakdown": res["breakdown"], "sdk": res["sdk"],
+            "platform": res.get("platform", {}), "tech": res.get("tech", []),
+            "other_platforms": res.get("other_platforms", []),
+            "engine_used": engine_used}
 
 
 @app.post("/api/targets/test")
 async def test_target(req: TargetTestRequest, ident: Identity = Depends(current_identity)):
-    """Dry-run a DRAFT target config against a known consumer repo - deterministic engine
-    only (no LLM, no DB write), so it answers 'does this definition detect?' in seconds."""
+    """Dry-run a DRAFT target config against a known consumer repo - deterministic engine,
+    no LLM prose, no DB write. engine="cloud" executes the SAME engine inside the deployed
+    RocketRide pipeline (tool_python node); any cloud failure falls back to in-process."""
+    if req.engine == "cloud":
+        base = (os.getenv("PUBLIC_BASE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
+        if not base:
+            raise HTTPException(400, "Cloud engine needs a public URL for node callbacks "
+                                     "(PUBLIC_BASE_URL / Render). Use local engine in dev.")
+        job_id, evnt = node_create_job({
+            "repo_url": req.repo_url,
+            "target_config": {**(req.config or {}), "name": req.name},
+            "gh_token": rb.GH_TOKEN or "",
+            "event_date": None, "history_penalty": None,
+        })
+        try:
+            answer = await repo_pool.ask(json.dumps({"base_url": base, "job_id": job_id}),
+                                         timeout=300)
+            await asyncio.wait_for(evnt.wait(), timeout=20 if answer else 120)
+            res = NODE_JOBS[job_id]["result"]
+            if res.get("error"):
+                raise HTTPException(400, f"Cloud engine: {res['error']}")
+            return _test_response(res, "rocketride-node")
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001 - cloud path failed; fall back in-process
+            print(f"[warn] cloud engine fell back to local: {e}")
+
     t = EngineTarget.from_ui_config(req.name.strip() or "Target", req.config or {})
     ev = await asyncio.to_thread(engine.gather, req.repo_url, rb._gh, None, None, t)
     if not ev.get("accessible"):
         raise HTTPException(400, f"Repo not accessible (HTTP {ev.get('status', '?')}).")
     res = engine.evaluate(ev, t)
-    return {"tag": res["tag"], "score": res["score"], "backbone": res["backbone"],
-            "breakdown": res["breakdown"], "sdk": res["sdk"],
-            "platform": res.get("platform", {}), "tech": res.get("tech", []),
-            "other_platforms": res.get("other_platforms", [])}
+    return _test_response(res, "local" if req.engine != "cloud" else "local (cloud fallback)")
 
 
 class ExportRequest(BaseModel):
@@ -374,3 +427,18 @@ async def export(req: ExportRequest):
 @app.get("/api/health")
 async def health():
     return {"ok": True, "classifier_ready": pool._token is not None}  # noqa: SLF001
+
+
+# SPA catch-all (declared last so every /api and /static route wins first): serves real
+# files from the built frontend, and index.html for client-side routes like /runs/abc.
+if DIST.exists():
+    from fastapi.responses import FileResponse
+
+    @app.get("/{spa_path:path}", include_in_schema=False)
+    async def spa(spa_path: str):
+        if spa_path.startswith(("api/", "static/", "legacy")):
+            raise HTTPException(404, "Not found.")
+        f = DIST / spa_path
+        if spa_path and f.is_file():
+            return FileResponse(str(f))
+        return HTMLResponse((DIST / "index.html").read_text(encoding="utf-8"))

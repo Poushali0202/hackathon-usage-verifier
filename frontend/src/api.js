@@ -38,8 +38,8 @@ export async function extractTarget({ githubUrl, docsUrl, pkg, files }) {
   if (!resp.ok) throw new Error(`${resp.status} ${await resp.text().catch(() => resp.statusText)}`)
   return resp.json()
 }
-export const testTarget = (repoUrl, name, config) =>
-  j('/api/targets/test', { method: 'POST', body: JSON.stringify({ repo_url: repoUrl, name, config }) })
+export const testTarget = (repoUrl, name, config, engine = 'local') =>
+  j('/api/targets/test', { method: 'POST', body: JSON.stringify({ repo_url: repoUrl, name, config, engine }) })
 
 async function streamNdjson(resp, onEvent) {
   if (!resp.ok) throw new Error(`${resp.status} ${await resp.text().catch(() => resp.statusText)}`)

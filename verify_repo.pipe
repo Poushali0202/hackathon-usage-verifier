@@ -1,0 +1,113 @@
+{
+ "components": [
+  {
+   "id": "chat_1",
+   "provider": "chat",
+   "config": {
+    "hideForm": true,
+    "mode": "Source",
+    "parameters": {},
+    "type": "chat"
+   }
+  },
+  {
+   "id": "agent_rocketride_1",
+   "provider": "agent_rocketride",
+   "config": {
+    "instructions": [
+     "You are a deterministic job runner, not an assistant. The user message is a JSON object with keys base_url and job_id. Step 1: take the Python code between <code> and </code> EXACTLY as written, replacing only __BASE_URL__ with the base_url value and __JOB_ID__ with the job_id value. Do not modify, reformat, or shorten anything else. Step 2: call the python tool exactly once with that code. Step 3: reply with ONLY the tool output text, nothing more. Never write your own code. Never use em dashes.\n<code>\nimport json, hashlib\nimport urllib.request\nBASE = \"__BASE_URL__\"\nJOB = \"__JOB_ID__\"\ndef _get(u):\n    with urllib.request.urlopen(u, timeout=90) as r:\n        return r.read().decode(\"utf-8\", \"replace\")\njob = json.loads(_get(BASE + \"/api/node/job/\" + JOB))\ncode = _get(BASE + \"/api/node/bundle.py\")\nif hashlib.sha256(code.encode(\"utf-8\")).hexdigest() != job[\"bundle_sha\"]:\n    raise SystemExit(\"bundle integrity check failed\")\nns = {}\nexec(code, ns)\nTOKEN = job.get(\"gh_token\") or \"\"\ndef gh(url):\n    hdrs = {\"User-Agent\": \"hackjudge-node\"}\n    if TOKEN and (\"api.github.com\" in url or \"raw.githubusercontent.com\" in url):\n        hdrs[\"Authorization\"] = \"Bearer \" + TOKEN\n    req = urllib.request.Request(url, headers=hdrs)\n    try:\n        with urllib.request.urlopen(req, timeout=60) as r:\n            return r.status, r.read().decode(\"utf-8\", \"replace\")\n    except Exception as e:\n        return getattr(e, \"code\", 0) or 0, \"\"\nres = ns[\"run_verify\"](job[\"repo_url\"], job[\"target_config\"], gh, job.get(\"event_date\"), job.get(\"history_penalty\"))\ndata = json.dumps({\"token\": job[\"cb_token\"], \"result\": res}).encode(\"utf-8\")\nreq = urllib.request.Request(BASE + \"/api/node/result/\" + JOB, data=data, headers={\"Content-Type\": \"application/json\"})\nwith urllib.request.urlopen(req, timeout=90) as r:\n    r.read()\nprint(\"VERIFIED tag=\" + str(res.get(\"tag\")) + \" score=\" + str(res.get(\"score\")))\n</code>"
+    ],
+    "max_waves": 6,
+    "parameters": {}
+   },
+   "input": [
+    {
+     "lane": "questions",
+     "from": "chat_1"
+    }
+   ]
+  },
+  {
+   "id": "llm_anthropic_1",
+   "provider": "llm_anthropic",
+   "config": {
+    "profile": "claude-sonnet-4-6",
+    "claude-sonnet-4-6": {
+     "apikey": "${ROCKETRIDE_ANTHROPIC_KEY}"
+    },
+    "parameters": {}
+   },
+   "control": [
+    {
+     "classType": "llm",
+     "from": "agent_rocketride_1"
+    }
+   ]
+  },
+  {
+   "id": "memory_internal_1",
+   "provider": "memory_internal",
+   "config": {
+    "type": "memory_internal"
+   },
+   "control": [
+    {
+     "classType": "memory",
+     "from": "agent_rocketride_1"
+    }
+   ]
+  },
+  {
+   "id": "tool_python_1",
+   "provider": "tool_python",
+   "config": {
+    "type": "tool_python",
+    "timeout": 600,
+    "allowedModules": [
+     {
+      "moduleName": "urllib.request"
+     },
+     {
+      "moduleName": "urllib.parse"
+     },
+     {
+      "moduleName": "urllib.error"
+     },
+     {
+      "moduleName": "hashlib"
+     },
+     {
+      "moduleName": "dataclasses"
+     },
+     {
+      "moduleName": "datetime"
+     }
+    ]
+   },
+   "control": [
+    {
+     "classType": "tool",
+     "from": "agent_rocketride_1"
+    }
+   ]
+  },
+  {
+   "id": "response_answers_1",
+   "provider": "response_answers",
+   "config": {},
+   "input": [
+    {
+     "lane": "answers",
+     "from": "agent_rocketride_1"
+    }
+   ]
+  }
+ ],
+ "project_id": "c4a7e2d1-8f3b-4a6c-9e5d-2b1f8c7a4e93",
+ "viewport": {
+  "x": 0,
+  "y": 0,
+  "zoom": 1
+ },
+ "version": 1
+}

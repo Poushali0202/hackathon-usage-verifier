@@ -20,3 +20,23 @@ services:
         sync: false
       - key: ROCKETRIDE_GITHUB_TOKEN
         sync: false
+  - type: web
+    name: hack-judge-phase2
+    runtime: python
+    branch: phase-2
+    plan: free                    # preview for team testing; SQLite is ephemeral here (DB resets
+                                  # on redeploy) until DATABASE_URL points at Supabase
+    buildCommand: pip install -r app/requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: ROCKETRIDE_URI
+        sync: false
+      - key: ROCKETRIDE_APIKEY
+        sync: false
+      - key: ROCKETRIDE_ANTHROPIC_KEY
+        sync: false
+      - key: ROCKETRIDE_GITHUB_TOKEN
+        sync: false

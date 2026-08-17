@@ -75,6 +75,7 @@ export default function Targets() {
   const [tUrl, setTUrl] = useState('')
   const [tBusy, setTBusy] = useState(false)
   const [tRes, setTRes] = useState(null)
+  const [tCloud, setTCloud] = useState(false)   // run the engine inside the RocketRide pipeline
 
   const load = () => listTargets().then(ts => {
     setTargets(ts)
@@ -152,7 +153,7 @@ export default function Targets() {
     setTBusy(true); setTRes(null)
     try {
       const { name, ...config } = form
-      setTRes(await testTarget(tUrl.trim(), name || 'Target', config))
+      setTRes(await testTarget(tUrl.trim(), name || 'Target', config, tCloud ? 'cloud' : 'local'))
     } catch (e) { setTRes({ error: String(e.message || e) }) }
     setTBusy(false)
   }
@@ -409,6 +410,11 @@ export default function Targets() {
               <button className="btn ghost sm" disabled={tBusy || !tUrl.includes('github.com')}
                       onClick={runTest}>{tBusy ? 'Testing…' : '⚙ Test'}</button>
             </div>
+            <label className="help" style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+              <input type="checkbox" checked={tCloud} onChange={e => setTCloud(e.target.checked)} />
+              ☁ Run the engine inside the RocketRide Cloud pipeline (needs a deployed instance;
+              falls back to local)
+            </label>
             {tRes && (
               <div className="detailbox" style={{ marginTop: 10, fontSize: 12.5 }}>
                 {tRes.error ? <span className="flagcell">{tRes.error}</span> : (
@@ -417,6 +423,12 @@ export default function Targets() {
                       <TagPill tag={tRes.tag} />
                       <b className="scorecell">{Number(tRes.score).toFixed(1)}</b>
                       <span className="muted">backbone {tRes.backbone}</span>
+                      {tRes.engine_used && (
+                        <span className={`techchip ${tRes.engine_used === 'rocketride-node' ? 'target' : ''}`}
+                              style={{ margin: 0 }}>
+                          {tRes.engine_used === 'rocketride-node' ? '☁ ran on RocketRide' : tRes.engine_used}
+                        </span>
+                      )}
                     </span>
                     <div style={{ marginTop: 8 }}>
                       {(tRes.breakdown || []).length === 0
