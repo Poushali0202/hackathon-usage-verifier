@@ -372,11 +372,13 @@ async def test_target(req: TargetTestRequest, ident: Identity = Depends(current_
     """Dry-run a DRAFT target config against a known consumer repo - deterministic engine,
     no LLM prose, no DB write. engine="cloud" executes the SAME engine inside the deployed
     RocketRide pipeline (tool_python node); any cloud failure falls back to in-process."""
+    cloud_note = ""
     if req.engine == "cloud":
         base = (os.getenv("PUBLIC_BASE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
         if not base:
-            raise HTTPException(400, "Cloud engine needs a public URL for node callbacks "
-                                     "(PUBLIC_BASE_URL / Render). Use local engine in dev.")
+            cloud_note = " (cloud needs a public URL - Render sets one automatically)"
+            req.engine = "local-fallback"
+    if req.engine == "cloud":
         job_id, evnt = node_create_job({
             "repo_url": req.repo_url,
             "target_config": {**(req.config or {}), "name": req.name},
@@ -401,7 +403,8 @@ async def test_target(req: TargetTestRequest, ident: Identity = Depends(current_
     if not ev.get("accessible"):
         raise HTTPException(400, f"Repo not accessible (HTTP {ev.get('status', '?')}).")
     res = engine.evaluate(ev, t)
-    return _test_response(res, "local" if req.engine != "cloud" else "local (cloud fallback)")
+    used = "local" if req.engine == "local" else f"local fallback{cloud_note}"
+    return _test_response(res, used)
 
 
 class ExportRequest(BaseModel):

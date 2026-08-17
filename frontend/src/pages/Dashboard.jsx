@@ -35,10 +35,11 @@ export default function Dashboard() {
             <Link className="btn sm" to="/runs/new">Start a run →</Link>
           </div>
         ) : (
+          <div className="scrolltable">
           <table className="list">
             <thead><tr><th>Run</th><th>Event date</th><th>Repos</th><th>Status</th></tr></thead>
             <tbody>
-              {(runs || []).slice(0, 6).map(r => (
+              {(runs || []).map(r => (
                 <tr key={r.id}>
                   <td><Link to={`/runs/${r.id}`}><b>{r.name}</b></Link></td>
                   <td>{r.event_date || '-'}</td>
@@ -48,6 +49,7 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </Shell>
