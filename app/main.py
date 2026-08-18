@@ -385,6 +385,7 @@ async def test_target(req: TargetTestRequest, ident: Identity = Depends(current_
             "gh_token": rb.GH_TOKEN or "",
             "event_date": None, "history_penalty": None,
         })
+        answer = ""
         try:
             answer = await repo_pool.ask(json.dumps({"base_url": base, "job_id": job_id}),
                                          timeout=300)
@@ -396,7 +397,11 @@ async def test_target(req: TargetTestRequest, ident: Identity = Depends(current_
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001 - cloud path failed; fall back in-process
-            print(f"[warn] cloud engine fell back to local: {e}")
+            detail = f"{type(e).__name__}: {e}"
+            if answer:
+                detail += f" | agent said: {str(answer)[:220]}"
+            cloud_note = f" ({detail[:300]})"
+            print(f"[warn] cloud engine fell back to local: {detail}")
 
     t = EngineTarget.from_ui_config(req.name.strip() or "Target", req.config or {})
     ev = await asyncio.to_thread(engine.gather, req.repo_url, rb._gh, None, None, t)
@@ -429,7 +434,8 @@ async def export(req: ExportRequest):
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "classifier_ready": pool._token is not None}  # noqa: SLF001
+    return {"ok": True, "classifier_ready": pool._token is not None,  # noqa: SLF001
+            "repo_pipeline_ready": repo_pool._token is not None}  # noqa: SLF001
 
 
 # SPA catch-all (declared last so every /api and /static route wins first): serves real

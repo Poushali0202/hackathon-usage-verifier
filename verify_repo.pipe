@@ -102,6 +102,9 @@
         "timeout": 600,
         "allowedModules": [
           {
+            "moduleName": "urllib"
+          },
+          {
             "moduleName": "urllib.request"
           },
           {
@@ -111,6 +114,18 @@
             "moduleName": "urllib.error"
           },
           {
+            "moduleName": "http"
+          },
+          {
+            "moduleName": "http.client"
+          },
+          {
+            "moduleName": "ssl"
+          },
+          {
+            "moduleName": "socket"
+          },
+          {
             "moduleName": "hashlib"
           },
           {
@@ -118,6 +133,18 @@
           },
           {
             "moduleName": "datetime"
+          },
+          {
+            "moduleName": "collections"
+          },
+          {
+            "moduleName": "typing"
+          },
+          {
+            "moduleName": "json"
+          },
+          {
+            "moduleName": "re"
           }
         ]
       },
