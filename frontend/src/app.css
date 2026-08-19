@@ -221,8 +221,12 @@ img.astro.lg{height:52px;margin-bottom:10px}
 tr.flagged td{background:#FFF6F4}
 .detailbox{padding:14px 16px;margin:6px 0 14px;border-radius:10px;background:var(--surface-alt);
   font-size:13px;white-space:pre-wrap}
-.detailbox .dbody{max-height:150px;overflow-y:auto}
-.detailbox.expanded .dbody{max-height:none;overflow-y:visible}
+/* fixed-size scrollable description panel: narrow so text wraps and overflows a set
+   height, giving a scrollbar to drag to the portion you want to screenshot */
+.detailbox.scrollbox{max-width:560px}
+.detailbox.scrollbox .dbody{height:72px;overflow-y:auto}
+.detailbox.scrollbox.expanded{max-width:none}
+.detailbox.scrollbox.expanded .dbody{height:auto;overflow-y:visible}
 .dtoggle{margin-top:8px;font-family:inherit;font-size:11.5px;font-weight:600;letter-spacing:.02em;
   color:var(--blue,#3B6FF5);background:none;border:none;padding:0;cursor:pointer}
 .dtoggle:hover{text-decoration:underline}

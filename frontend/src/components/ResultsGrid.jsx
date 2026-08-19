@@ -16,7 +16,7 @@ function DetailBox({ children }) {
     if (el) setOverflows(el.scrollHeight > el.clientHeight + 2)
   }, [])
   return (
-    <div className={`detailbox${expanded ? ' expanded' : ''}`}>
+    <div className={`detailbox scrollbox${expanded ? ' expanded' : ''}`}>
       <div className="dbody" ref={ref}>{children}</div>
       {(overflows || expanded) && (
         <button type="button" className="dtoggle" onClick={() => setExpanded(v => !v)}>
