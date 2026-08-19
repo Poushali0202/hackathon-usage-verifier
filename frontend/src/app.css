@@ -22,7 +22,7 @@
 }
 *{box-sizing:border-box} html{-webkit-font-smoothing:antialiased}
 body{margin:0;min-height:100vh;color:var(--ink);
-  font:14.5px/1.55 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;
+  font:15.5px/1.55 Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;
   background:var(--bg)}
 a{color:var(--blue);text-decoration:none}
 .mono{font-family:"Ubuntu Mono",ui-monospace,Consolas,monospace}
@@ -219,17 +219,8 @@ img.astro.lg{height:52px;margin-bottom:10px}
 .flagcell{color:var(--red);font-weight:700}
 .scorecell{font-family:"Ubuntu Mono",ui-monospace,monospace;font-weight:700}
 tr.flagged td{background:#FFF6F4}
-.detailbox{padding:14px 16px;margin:6px 0 14px;border-radius:10px;background:var(--surface-alt);
-  font-size:13px;white-space:pre-wrap}
-/* fixed-size scrollable description panel: narrow so text wraps and overflows a set
-   height, giving a scrollbar to drag to the portion you want to screenshot */
-.detailbox.scrollbox{max-width:560px}
-.detailbox.scrollbox .dbody{height:72px;overflow-y:auto}
-.detailbox.scrollbox.expanded{max-width:none}
-.detailbox.scrollbox.expanded .dbody{height:auto;overflow-y:visible}
-.dtoggle{margin-top:8px;font-family:inherit;font-size:11.5px;font-weight:600;letter-spacing:.02em;
-  color:var(--blue,#3B6FF5);background:none;border:none;padding:0;cursor:pointer}
-.dtoggle:hover{text-decoration:underline}
+.detailbox{padding:15px 18px;margin:6px 0 12px;border-radius:10px;background:var(--surface-alt);
+  font-size:14.5px;line-height:1.5;white-space:pre-wrap;max-width:1000px}
 .dqline{padding:10px 13px;border-radius:10px;border:1.5px solid rgba(249,56,34,.4);background:var(--error-bg);
   color:var(--ink);font-size:12.5px;margin:8px 0}
 
@@ -382,7 +373,7 @@ img.astro.lg{height:84px;margin-bottom:6px}
 .readhead{display:flex;align-items:baseline;gap:10px}
 .verdict{font-weight:800;font-size:14px}
 .verdict.Yes{color:#177A3E} .verdict.Partial{color:var(--blue-hover)} .verdict.No{color:var(--muted)}
-.scene{position:relative;height:272px;perspective:1400px;margin-top:6px}
+.scene{position:relative;height:212px;perspective:1400px;margin-top:6px}
 .tower{position:absolute;left:30%;top:53%;width:180px;height:118px;
   transform:translate(-50%,-50%) rotateX(56deg) rotateZ(-42deg);transform-style:preserve-3d}
 .pane{position:absolute;inset:0;border-radius:14px;
