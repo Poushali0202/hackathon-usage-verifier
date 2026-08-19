@@ -1,8 +1,31 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { ProModal, TagPill } from './bits.jsx'
 import Tower from './Tower.jsx'
 import { exportExcel } from '../api.js'
 import { getPlan } from '../store.js'
+
+// A description box that stays compact and scrollable, but can be expanded to its
+// full height - e.g. to screenshot the whole description at 100% zoom. The toggle
+// only appears when the text is actually taller than the box.
+function DetailBox({ children }) {
+  const ref = useRef(null)
+  const [expanded, setExpanded] = useState(false)
+  const [overflows, setOverflows] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (el) setOverflows(el.scrollHeight > el.clientHeight + 2)
+  }, [])
+  return (
+    <div className={`detailbox${expanded ? ' expanded' : ''}`}>
+      <div className="dbody" ref={ref}>{children}</div>
+      {(overflows || expanded) && (
+        <button type="button" className="dtoggle" onClick={() => setExpanded(v => !v)}>
+          {expanded ? 'Collapse ▴' : 'Expand full description ▾'}
+        </button>
+      )}
+    </div>
+  )
+}
 
 // history_tampered and reused_pipelines are LISTS on the wire (empty = clean) - never
 // truthiness-check them directly, an empty array is truthy in JS.
@@ -70,8 +93,8 @@ function Detail({ r, pro }) {
           ♻ Pipelines predating the event window: {r.reused_pipelines.join(', ')} (−1 reuse)
         </div>
       )}
-      {r.description && <div className="detailbox"><b>What it is:</b> {r.description}</div>}
-      {r.rocketride_usage && <div className="detailbox"><b>How {r.target_name || 'the target'} is used:</b> {r.rocketride_usage}</div>}
+      {r.description && <DetailBox><b>What it is:</b> {r.description}</DetailBox>}
+      {r.rocketride_usage && <DetailBox><b>How {r.target_name || 'the target'} is used:</b> {r.rocketride_usage}</DetailBox>}
       {(r.platform?.domains?.length > 0 || r.platform?.files?.length > 0 || r.platform?.markers?.length > 0) && (
         <div className="detailbox">
           <b>Platform evidence:</b>
