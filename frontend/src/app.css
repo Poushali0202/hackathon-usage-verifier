@@ -220,7 +220,7 @@ img.astro.lg{height:52px;margin-bottom:10px}
 .scorecell{font-family:"Ubuntu Mono",ui-monospace,monospace;font-weight:700}
 tr.flagged td{background:#FFF6F4}
 .detailbox{padding:14px 16px;margin:6px 0 14px;border-radius:10px;background:var(--surface-alt);
-  font-size:13px;white-space:pre-wrap}
+  font-size:13px;white-space:pre-wrap;max-height:150px;overflow-y:auto}
 .dqline{padding:10px 13px;border-radius:10px;border:1.5px solid rgba(249,56,34,.4);background:var(--error-bg);
   color:var(--ink);font-size:12.5px;margin:8px 0}
 
