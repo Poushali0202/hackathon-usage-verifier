@@ -185,7 +185,7 @@ export default function ResultsGrid({ results, total, summary, exportName }) {
                   onClick={() => exportExcel(results, exportName)}>⬇ Excel</button>
         </span>
       </div>
-      <table className="list">
+      <table className="list runs">
         <thead>
           <tr><th>Project</th><th>Tag</th><th>Score</th><th>Backbone</th><th>Built on</th><th>Time</th></tr>
         </thead>

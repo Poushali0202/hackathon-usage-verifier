@@ -660,3 +660,60 @@ img.only-dark, .brand img.only-dark{display:none}
 .scrolltable table.list th{position:sticky;top:0;z-index:2;
   background:rgba(250,251,248,.95);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 [data-theme="dark"] .scrolltable table.list th{background:rgba(17,16,32,.95)}
+
+/* ================================================================ responsive
+   The app is desktop-first; these layers adapt it down to tablets and phones.
+   <=960 tablet grids · <=680 phone (sidebar -> top bar, tower shrinks) · <=420 tiny */
+@media (max-width: 960px){
+  .main{padding:22px 20px}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .features,.tiers{grid-template-columns:repeat(2,1fr)}
+  .rubricgrid{grid-template-columns:1fr}
+  .hero{padding:58px 22px 34px}
+}
+@media (max-width: 680px){
+  /* the fixed sidebar becomes a horizontally-scrollable top nav bar */
+  .shell{grid-template-columns:1fr}
+  .side{flex-direction:row;align-items:center;gap:4px;padding:9px 12px;
+    overflow-x:auto;flex-wrap:nowrap;border-right:0;border-bottom:1px solid var(--bd-subtle);
+    position:sticky;top:0;z-index:30;background:var(--panel)}
+  .side .brand{margin:0 6px 0 2px;flex:none}
+  .side a{flex:none;white-space:nowrap;padding:7px 11px}
+  .side .grow,.side .upgrade{display:none}
+
+  .main{padding:16px 14px;max-width:none}
+  .pagehead{flex-wrap:wrap;gap:10px}
+  .pagehead h1{font-size:19px}
+  .pagehead .right{margin-left:0}
+
+  .stats{grid-template-columns:1fr 1fr;gap:10px}
+  .stat{padding:13px 14px}
+  .stat .n{font-size:21px}
+  .features,.tiers{grid-template-columns:1fr}
+
+  .inline{flex-direction:column;gap:0}
+  .steps{flex-wrap:wrap}
+  .topnav{gap:12px;padding:11px 16px;flex-wrap:wrap}
+  .modal{width:min(400px, calc(100vw - 28px))}
+  .hero{padding:42px 18px 26px}
+
+  /* run list: keep Project/Tag/Score, drop secondary columns; detail row spans all */
+  table.list.runs thead th:nth-child(n+4),
+  table.list.runs tbody td:not([colspan]):nth-child(n+4){display:none}
+  /* wrapped tables scroll sideways inside their own container */
+  .scrolltable{overflow-x:auto}
+  .scrolltable table.list{min-width:460px}
+
+  /* backbone tower: shrink the plates and trim glows so nothing collides on a narrow scene */
+  .scene{height:300px}
+  .scene::before{width:200px;height:150px}
+  .scene::after{width:150px;height:110px}
+  .tower{transform:translate(-50%,-50%) rotateX(56deg) rotateZ(-42deg) scale(.64)}
+  .callout{width:104px}
+
+  .detailscroll{max-height:72vh}
+}
+@media (max-width: 420px){
+  .stats{grid-template-columns:1fr}
+  .side a{padding:6px 9px}
+}
