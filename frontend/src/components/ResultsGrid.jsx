@@ -29,6 +29,7 @@ function Detail({ r, pro }) {
   const team = teamNames(r.names)
   return (
     <td colSpan={6} style={{ padding: '10px 16px 18px' }}>
+      <div className="detailscroll">
       {/* header: title, team byline, link buttons (gallery-style) */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
         <div style={{ flex: 1 }}>
@@ -160,6 +161,7 @@ function Detail({ r, pro }) {
           ) : null}
         </div>
       )}
+      </div>
     </td>
   )
 }
