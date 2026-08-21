@@ -1,0 +1,122 @@
+{
+  "components": [
+    {
+      "id": "chat_1",
+      "provider": "chat",
+      "config": {
+        "hideForm": true,
+        "mode": "Source",
+        "parameters": {},
+        "type": "chat"
+      }
+    },
+    {
+      "id": "account_1",
+      "provider": "hackjudge_account",
+      "config": {
+        "type": "hackjudge_account",
+        "parameters": {}
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "chat_1"
+        }
+      ]
+    },
+    {
+      "id": "gate_1",
+      "provider": "hackjudge_tokens",
+      "config": {
+        "type": "hackjudge_tokens",
+        "parameters": {},
+        "role": "gate"
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "account_1"
+        }
+      ]
+    },
+    {
+      "id": "engine_1",
+      "provider": "hackjudge_engine",
+      "config": {
+        "type": "hackjudge_engine",
+        "parameters": {}
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "gate_1"
+        }
+      ]
+    },
+    {
+      "id": "store_1",
+      "provider": "hackjudge_store",
+      "config": {
+        "type": "hackjudge_store",
+        "parameters": {}
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "engine_1"
+        }
+      ]
+    },
+    {
+      "id": "settle_1",
+      "provider": "hackjudge_tokens",
+      "config": {
+        "type": "hackjudge_tokens",
+        "parameters": {},
+        "role": "settle"
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "store_1"
+        }
+      ]
+    },
+    {
+      "id": "resp_1",
+      "provider": "response_answers",
+      "config": {
+        "laneName": "answers"
+      },
+      "input": [
+        {
+          "lane": "answers",
+          "from": "settle_1"
+        },
+        {
+          "lane": "answers",
+          "from": "account_1"
+        },
+        {
+          "lane": "answers",
+          "from": "gate_1"
+        },
+        {
+          "lane": "answers",
+          "from": "engine_1"
+        },
+        {
+          "lane": "answers",
+          "from": "store_1"
+        }
+      ]
+    }
+  ],
+  "project_id": "e5a1c7f3-9b2d-4e6a-8c4f-7d3b1a9e5c2f",
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "version": 1
+}
