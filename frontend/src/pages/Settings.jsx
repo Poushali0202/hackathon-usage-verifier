@@ -29,14 +29,14 @@ export default function Settings() {
             <div>
               <b>{user?.name}</b>
               <div className="muted" style={{ fontSize: 12.5 }}>
-                Signed in via O-Connect (RocketRide App Marketplace) · org: {user?.org}
+                Signed in (dev preview) · org: {user?.org}
               </div>
             </div>
             <button className="btn ghost sm" style={{ marginLeft: 'auto' }}
                     onClick={() => { signOut(); nav('/') }}>Sign out</button>
           </div>
           <p className="muted" style={{ fontSize: 12, margin: '10px 0 0' }}>
-            Dev stub session - the real O-Connect account panel replaces this card.
+            Dev preview session - the real account panel ships with the marketplace integration.
           </p>
         </div>
 
@@ -52,8 +52,8 @@ export default function Settings() {
             </select>
           </div>
           <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-            Visual preview only - real entitlements arrive with App Marketplace billing (Stripe +
-            O-Connect). "Free" shows the locked Built-on column, integrity flags and penalty
+            Visual preview only - real entitlements arrive with marketplace billing (Stripe).
+            "Free" shows the locked Built-on column, integrity flags and penalty
             control, which is how the upsell will look.
           </p>
           <button className="btn sm" style={{ marginTop: 10 }} onClick={save}>{saved ? 'Saved ✓' : 'Save'}</button>

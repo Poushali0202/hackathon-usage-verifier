@@ -16,7 +16,7 @@ export default function Landing() {
     <>
       <TopNav />
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '56px 24px', textAlign: 'center' }}>
-        <img className="astro lg" src="/astronaut.svg" alt="" />
+        <img className="astro lg" src="/hackjudge-mark.svg" alt="" />
         <div className="eyebrow">for hackathon sponsors &amp; organizers</div>
         <h1 style={{ fontSize: 40, letterSpacing: '-1px', margin: '10px 0 12px' }}>
           Judge hackathons on <span className="hl">proof</span>, not claims.
@@ -76,7 +76,7 @@ export default function Landing() {
         </div>
 
         <div className="trustline">
-          TRUSTED AT ROCKETRIDE HACKATHONS · 5 EVENTS · 150+ REPOS VERIFIED
+          TRUSTED BY ROCKETRIDE · 5 EVENTS · 150+ REPOS VERIFIED
         </div>
       </div>
     </>

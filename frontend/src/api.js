@@ -2,8 +2,8 @@
 //   {event:"start", total}  →  {event:"stage"|"result", index, ...}  →  {event:"done", summary}
 const BASE = import.meta.env.VITE_API_BASE || ''   // '' = same origin / vite dev proxy
 
-// Dev identity header - mirrors the O-Connect stub session. The backend's AUTH_MODE=dev
-// maps it to a tenant; when real O-Connect lands this becomes an Authorization header.
+// Dev identity header - mirrors the auth stub session. The backend's AUTH_MODE=dev
+// maps it to a tenant; real sign-in replaces this with an Authorization header.
 function authHeaders() {
   try {
     const u = JSON.parse(localStorage.getItem('hj_user'))

@@ -8,8 +8,8 @@ export default function TopNav() {
   return (
     <nav className="topnav">
       <Link className="brand" to="/">
-        <img className="logo only-light" src="/rocketride-icon-color.svg" alt="" />
-        <img className="logo only-dark" src="/rocketride-icon-white.svg" alt="" /> Hack Judge
+        <img className="logo only-light" src="/hackjudge-logo-color.svg" alt="" />
+        <img className="logo only-dark" src="/hackjudge-logo-white.svg" alt="" /> Hack Judge
       </Link>
       <span className="links">
         <NavLink to="/pricing">Pricing</NavLink>

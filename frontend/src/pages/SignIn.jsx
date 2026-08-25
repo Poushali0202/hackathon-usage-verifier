@@ -11,20 +11,20 @@ export default function SignIn() {
     <>
       <TopNav />
       <div className="authcard glass">
-        <img src="/astronaut.svg" alt="" style={{ height: 64 }} className="astro" />
+        <img src="/hackjudge-mark.svg" alt="" style={{ height: 64 }} className="astro" />
         <h2 style={{ margin: '10px 0 4px' }}>Sign in to Hack Judge</h2>
         <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
-          One account across the RocketRide App Marketplace.
+          One account for your whole judging team.
         </p>
         <button className="btn" onClick={go}>
-          Continue with O-Connect →
+          Sign in →
         </button>
         <div className="stubnote">
-          Dev stub: creates a local session. The real O-Connect flow (RocketRide App
-          Marketplace) replaces this button once integration details are confirmed.
+          Dev preview: creates a local session. Real account sign-in ships with the
+          marketplace integration.
         </div>
         <div className="trustline sm">
-          TRUSTED AT ROCKETRIDE HACKATHONS · 150+ REPOS VERIFIED
+          BATTLE-TESTED AT LIVE HACKATHONS · 150+ REPOS VERIFIED
         </div>
       </div>
     </>

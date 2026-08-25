@@ -15,14 +15,14 @@ export default function Pricing() {
         <div className="eyebrow" style={{ textAlign: 'center' }}>pricing</div>
         <h1 style={{ textAlign: 'center', margin: '8px 0 6px' }}>Simple plans for every event</h1>
         <p className="muted" style={{ textAlign: 'center', margin: '0 0 30px' }}>
-          Billing runs through the RocketRide App Marketplace (Stripe + O-Connect). Final pricing
+          Billing arrives with the marketplace integration (Stripe). Final pricing
           is being coordinated - amounts below are placeholders.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
           {TIERS.map(([name, price, feats, pro]) => (
             <div key={name} className="glass" style={{ padding: 22, borderColor: pro ? 'rgba(249,56,34,.5)' : undefined }}>
               <h3 style={{ margin: 0 }}>
-                {name} {pro && <img className="astro" src="/astronaut.svg" alt="" />}
+                {name} {pro && <img className="astro" src="/hackjudge-mark.svg" alt="" />}
               </h3>
               <div style={{ fontSize: 24, fontWeight: 800, margin: '6px 0 12px' }}>
                 {price ?? <span className="muted" style={{ fontSize: 15 }}>TBD</span>}

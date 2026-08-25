@@ -1,11 +1,10 @@
 import { createContext, useContext, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
-// O-Connect STUB. The real integration goes through the RocketRide App Marketplace's
-// O-Connect application (token format / org claims / embed-vs-redirect still to be
-// confirmed with Shashi). Until then this fakes a signed-in session in localStorage so
-// every authed page and route guard is already in place - swapping in real O-Connect
-// should only touch this file.
+// AUTH STUB. Real sign-in ships with the marketplace integration (shell-vs-standalone
+// and identity mechanics pending). Until then this fakes a signed-in session in
+// localStorage so every authed page and route guard is already in place - swapping in
+// the real flow should only touch this file.
 const AuthCtx = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -13,15 +12,15 @@ export function AuthProvider({ children }) {
     try { return JSON.parse(localStorage.getItem('hj_user')) } catch { return null }
   })
   const signIn = () => {
-    const u = { name: 'Poushali', org: 'RocketRide Inc', via: 'o-connect-stub' }
+    const u = { name: 'Poushali', org: 'RocketRide Inc', via: "dev-stub" }
     localStorage.setItem('hj_user', JSON.stringify(u))
     setUser(u)
   }
   const signOut = () => { localStorage.removeItem('hj_user'); setUser(null) }
   // dev-only: swap the stub identity (and therefore the tenant). Reload so every page
-  // refetches under the new org. Real O-Connect replaces this with its org switcher.
+  // refetches under the new org. The real account panel replaces this with its org switcher.
   const switchUser = (name, org) => {
-    localStorage.setItem('hj_user', JSON.stringify({ name, org, via: 'o-connect-stub' }))
+    localStorage.setItem('hj_user', JSON.stringify({ name, org, via: "dev-stub" }))
     window.location.reload()
   }
   return <AuthCtx.Provider value={{ user, signIn, signOut, switchUser }}>{children}</AuthCtx.Provider>
