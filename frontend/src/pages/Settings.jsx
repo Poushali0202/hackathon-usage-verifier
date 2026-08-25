@@ -1,8 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Shell from '../components/Shell.jsx'
 import { useAuth } from '../auth.jsx'
 import { getSettings, saveSettings } from '../store.js'
+import { getCredentials, saveCredentials } from '../api.js'
+
+const CRED_FIELDS = [
+  { key: 'ROCKETRIDE_LLM_API_KEY', label: 'LLM API key',
+    hint: 'Shared by the organisation. Used only to write the plain-English explanations - verdicts are deterministic and never need it.' },
+  { key: 'ROCKETRIDE_GITHUB_TOKEN', label: 'GitHub token',
+    hint: 'Read-only public scope is enough - it only raises the GitHub rate limit for repo fetches.' },
+]
 
 export default function Settings() {
   const { user, signOut } = useAuth()
@@ -32,17 +40,7 @@ export default function Settings() {
           </p>
         </div>
 
-        <div className="glass" style={{ padding: 20 }}>
-          <div className="eyebrow" style={{ marginBottom: 10 }}>LLM key (BYOK)</div>
-          <div className="field" style={{ marginBottom: 6 }}>
-            <label>Anthropic API key <span className="muted">(used only to write explanations - scoring is deterministic)</span></label>
-            <input type="password" placeholder={s.llm_key_set ? '••••••••••••  (set)' : 'sk-ant-…'}
-                   onChange={e => setS({ ...s, llm_key_set: e.target.value.length > 0 })} />
-          </div>
-          <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-            v0 keeps the server's configured key; per-tenant keys are stored encrypted once the DB lands (M2).
-          </p>
-        </div>
+        <CredentialsCard />
 
         <div className="glass" style={{ padding: 20 }}>
           <div className="eyebrow" style={{ marginBottom: 10 }}>Plan preview</div>
@@ -79,5 +77,61 @@ export default function Settings() {
         </div>
       </div>
     </Shell>
+  )
+}
+
+// API credentials card - values go straight into RocketRide's encrypted environment
+// keystore (org scope). The input never holds a stored value: the mask is the
+// placeholder, blank input leaves a key alone, and there is no read-back.
+function CredentialsCard() {
+  const [info, setInfo] = useState(null)          // {keystore, keys:{KEY:{present,length}}}
+  const [drafts, setDrafts] = useState({})
+  const [status, setStatus] = useState('')
+
+  const refresh = () => getCredentials().then(setInfo).catch(() => setInfo(null))
+  useEffect(() => { refresh() }, [])
+
+  const save = async () => {
+    const filled = Object.fromEntries(Object.entries(drafts).filter(([, v]) => (v || '').trim()))
+    if (!Object.keys(filled).length) { setStatus('Nothing to store.'); return }
+    setStatus('Saving…')
+    try {
+      const res = await saveCredentials(filled)
+      setDrafts({})
+      setStatus(`Saved: ${(res.set || []).join(', ')}. New keys apply when the next pipeline starts.`)
+      refresh()
+    } catch (e) { setStatus(String(e.message || e)) }
+  }
+
+  const mask = (k) => {
+    const rec = info?.keys?.[k]
+    if (!rec?.present) return 'Paste the value…'
+    return rec.length ? '•'.repeat(Math.min(rec.length, 32)) : '••••••••  (set)'
+  }
+
+  return (
+    <div className="glass" style={{ padding: 20 }}>
+      <div className="eyebrow" style={{ marginBottom: 10 }}>API credentials</div>
+      {CRED_FIELDS.map(f => (
+        <div className="field" key={f.key} style={{ marginBottom: 10 }}>
+          <label>
+            {f.label}{' '}
+            <span className="muted">
+              {info?.keys?.[f.key]?.present ? '· in use' : info ? '· missing' : ''}
+            </span>
+          </label>
+          <input type="password" autoComplete="off" value={drafts[f.key] || ''}
+                 placeholder={mask(f.key)}
+                 onChange={e => setDrafts({ ...drafts, [f.key]: e.target.value })} />
+          <div className="help">{f.hint}</div>
+        </div>
+      ))}
+      <button className="btn sm" onClick={save}>Save credentials</button>
+      <p className="muted" style={{ fontSize: 12, margin: '10px 0 0' }}>
+        Stored in RocketRide's encrypted environment ({info?.keystore === false ? 'keystore unavailable here - keys fall back to the server environment' : 'org scope'});
+        pipelines reference them by name and values are never shown again.
+      </p>
+      {status && <p className="muted" style={{ fontSize: 12.5, margin: '8px 0 0' }}>{status}</p>}
+    </div>
   )
 }

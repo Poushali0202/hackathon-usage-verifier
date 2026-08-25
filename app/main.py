@@ -432,6 +432,81 @@ async def export(req: ExportRequest):
         headers={"Content-Disposition": 'attachment; filename="RocketRide_Hackathon_Usage.xlsx"'})
 
 
+# ---- credentials: RocketRide's encrypted environment keystore ------------------
+# Pattern per the platform reference app (rocket-crm-ui): values live in the
+# account environment, pipelines hold only ${VAR} references, presence is
+# checked without values, blank input never erases, and there is no reader.
+CREDENTIAL_KEYS = ("ROCKETRIDE_LLM_API_KEY", "ROCKETRIDE_GITHUB_TOKEN")
+
+
+async def _account_session():
+    """Short-lived cloud connection for account keystore calls."""
+    from rocketride import RocketRideClient
+    client = RocketRideClient()
+    await client.connect()
+    return client
+
+
+@app.get("/api/credentials")
+async def credentials_get(ident: Identity = Depends(current_identity)):
+    """Presence (and masked lengths) of the app's credential keys. Values never
+    leave the keystore; only names and lengths are derived."""
+    out = {k: {"present": False, "length": 0} for k in CREDENTIAL_KEYS}
+    client = None
+    try:
+        client = await _account_session()
+        names = set(await client.account.get_environment_keys())
+        for key in CREDENTIAL_KEYS:
+            out[key]["present"] = key in names
+        # lengths for the mask: org then user (user wins, mirroring resolution order)
+        merged = {}
+        for scope in ("org", "user"):
+            try:
+                merged.update(await client.account.get_env(scope) or {})
+            except Exception:  # noqa: BLE001 - a scope may not exist for this account
+                pass
+        for key in CREDENTIAL_KEYS:
+            value = merged.get(key)
+            if value:
+                out[key] = {"present": True, "length": len(str(value))}
+        return {"keystore": True, "keys": out}
+    except Exception as e:  # noqa: BLE001 - no keystore (plain engine): env fallback
+        for key in CREDENTIAL_KEYS:
+            out[key] = {"present": bool(os.environ.get(key)), "length": 0}
+        return {"keystore": False, "keys": out, "note": f"keystore unavailable ({type(e).__name__})"}
+    finally:
+        if client is not None:
+            try:
+                await client.disconnect()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+class CredentialsBody(BaseModel):
+    updates: dict = {}
+
+
+@app.post("/api/credentials")
+async def credentials_set(body: CredentialsBody, ident: Identity = Depends(current_identity)):
+    """Store credentials at org scope. Read-modify-write the whole dict (set_env
+    replaces it); blanks are left alone; values are never logged or echoed."""
+    filled = {k: str(v).strip() for k, v in (body.updates or {}).items()
+              if k in CREDENTIAL_KEYS and str(v or "").strip()}
+    if not filled:
+        raise HTTPException(400, "nothing to store")
+    client = await _account_session()
+    try:
+        env = dict(await client.account.get_env("org") or {})
+        env.update(filled)
+        await client.account.set_env("org", env)
+        return {"ok": True, "set": sorted(filled)}
+    finally:
+        try:
+            await client.disconnect()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 @app.get("/api/health")
 async def health():
     return {"ok": True, "classifier_ready": pool._token is not None,  # noqa: SLF001

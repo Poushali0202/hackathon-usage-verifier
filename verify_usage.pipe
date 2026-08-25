@@ -26,7 +26,7 @@
       "config": {
         "profile": "claude-sonnet-4-6",
         "claude-sonnet-4-6": {
-          "apikey": "${ROCKETRIDE_ANTHROPIC_KEY}"
+          "apikey": "${ROCKETRIDE_LLM_API_KEY}"
         },
         "parameters": {}
       },

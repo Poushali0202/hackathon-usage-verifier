@@ -21,6 +21,10 @@ async function j(path, opts = {}) {
 }
 
 // ---- persisted entities (M2) ----
+// credentials live in RocketRide's encrypted environment keystore - presence only, no read-back
+export const getCredentials = () => j('/api/credentials')
+export const saveCredentials = (updates) => j('/api/credentials', { method: 'POST', body: JSON.stringify({ updates }) })
+
 export const listTargets = () => j('/api/targets')
 export const createTarget = (name, config) => j('/api/targets', { method: 'POST', body: JSON.stringify({ name, config }) })
 export const updateTarget = (id, name, config) => j(`/api/targets/${id}`, { method: 'PUT', body: JSON.stringify({ name, config }) })
