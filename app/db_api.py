@@ -133,6 +133,7 @@ async def list_runs(ident: Identity = Depends(current_identity)):
             "target_name": tmap.get(r.target_id) or "RocketRide",
             "history_penalty": r.history_penalty, "status": r.status, "total": r.total,
             "summary": r.summary, "created_at": r.created_at.isoformat(),
+            "finished_at": r.finished_at.isoformat() if r.finished_at else None,
             "done_count": counts.get(r.id, (0, 0))[0],
             "flagged_count": counts.get(r.id, (0, 0))[1],
             "significant_count": sig.get(r.id, 0),
