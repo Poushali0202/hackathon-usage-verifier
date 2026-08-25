@@ -12,7 +12,7 @@ export default function LiveHint() {
         </div>
         <div className="liveticks"><i /><i /><i /><i /><i /><i /></div>
       </div>
-      <img className="astro" src="/hackjudge-mark.svg" alt="" style={{ height: 34 }} />
+      <img className="astro" src="/astronaut.svg" alt="" style={{ height: 34 }} />
     </div>
   )
 }

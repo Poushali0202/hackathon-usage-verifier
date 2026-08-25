@@ -23,7 +23,8 @@ elif DB_URL.startswith("postgresql://"):
 # disabling the cache makes both pooler modes safe. Direct/session connections are fine.
 _connect_args = {"statement_cache_size": 0} if "pooler.supabase" in DB_URL else {}
 
-engine = create_async_engine(DB_URL, echo=False, connect_args=_connect_args)
+engine = create_async_engine(DB_URL, echo=False, connect_args=_connect_args,
+                             pool_pre_ping=True, pool_recycle=300)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

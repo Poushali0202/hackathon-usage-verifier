@@ -28,7 +28,7 @@ export default function Dashboard() {
         {err && <p className="dqline" style={{ margin: '0 16px 14px' }}>Couldn't reach the API: {err}</p>}
         {runs && runs.length === 0 ? (
           <div style={{ padding: '10px 16px 26px', textAlign: 'center' }}>
-            <img className="astro" src="/hackjudge-mark.svg" alt="" style={{ height: 44 }} />
+            <img className="astro" src="/astronaut.svg" alt="" style={{ height: 44 }} />
             <p className="muted" style={{ fontSize: 13.5 }}>
               No runs yet. Start your first verification - upload a submissions sheet or paste repo URLs.
             </p>

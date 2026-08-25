@@ -22,7 +22,7 @@ export default function Pricing() {
           {TIERS.map(([name, price, feats, pro]) => (
             <div key={name} className="glass" style={{ padding: 22, borderColor: pro ? 'rgba(249,56,34,.5)' : undefined }}>
               <h3 style={{ margin: 0 }}>
-                {name} {pro && <img className="astro" src="/hackjudge-mark.svg" alt="" />}
+                {name} {pro && <img className="astro" src="/astronaut.svg" alt="" />}
               </h3>
               <div style={{ fontSize: 24, fontWeight: 800, margin: '6px 0 12px' }}>
                 {price ?? <span className="muted" style={{ fontSize: 15 }}>TBD</span>}

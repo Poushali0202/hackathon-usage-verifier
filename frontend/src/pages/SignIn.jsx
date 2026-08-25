@@ -11,7 +11,7 @@ export default function SignIn() {
     <>
       <TopNav />
       <div className="authcard glass">
-        <img src="/hackjudge-mark.svg" alt="" style={{ height: 64 }} className="astro" />
+        <img src="/astronaut.svg" alt="" style={{ height: 64 }} className="astro" />
         <h2 style={{ margin: '10px 0 4px' }}>Sign in to Hack Judge</h2>
         <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
           One account for your whole judging team.

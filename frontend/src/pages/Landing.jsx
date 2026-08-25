@@ -16,8 +16,8 @@ export default function Landing() {
     <>
       <TopNav />
       <div style={{ maxWidth: 980, margin: '0 auto', padding: '56px 24px', textAlign: 'center' }}>
-        <img className="astro lg" src="/hackjudge-mark.svg" alt="" />
-        <div className="eyebrow">for hackathon sponsors &amp; organizers</div>
+        <img className="astro lg" src="/astronaut.svg" alt="" />
+        <div className="eyebrow">for hackathon sponsors, organizers &amp; builders</div>
         <h1 style={{ fontSize: 40, letterSpacing: '-1px', margin: '10px 0 12px' }}>
           Judge hackathons on <span className="hl">proof</span>, not claims.
         </h1>

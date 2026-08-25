@@ -101,7 +101,7 @@ export default function NewRun() {
             <div style={{ flex: 1 }}>
               <div className="runbar"><i style={{ width: `${pct}%` }} /></div>
               <div className="stageline">
-                <img className="astro" src="/hackjudge-mark.svg" alt="" /> verifying… {run.stage || ''}
+                <img className="astro" src="/astronaut.svg" alt="" /> verifying… {run.stage || ''}
               </div>
             </div>
             <button className="btn ghost sm" onClick={() => abortRef.current?.abort()}>■ Stop run</button>

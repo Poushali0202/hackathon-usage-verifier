@@ -94,7 +94,7 @@ export default function QuickVerify() {
           </button>
           {run?.status === 'running' && (
             <span className="stageline" style={{ flex: 1 }}>
-              <img className="astro" src="/hackjudge-mark.svg" alt="" /> {run.stage}
+              <img className="astro" src="/astronaut.svg" alt="" /> {run.stage}
             </span>
           )}
         </div>

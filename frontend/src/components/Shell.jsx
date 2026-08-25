@@ -11,8 +11,7 @@ export default function Shell({ title, wide = false, headRight = null, children 
     <div className="shell">
       <aside className="side">
         <span className="brand">
-          <img className="logo sm only-light" src="/hackjudge-logo-color.svg" alt="" />
-          <img className="logo sm only-dark" src="/hackjudge-logo-white.svg" alt="" /> Hack Judge
+          <img className="logo sm" src="/astronaut.svg" alt="" /> Hack Judge
         </span>
         <NavLink className={cls} to="/dashboard">▦ Dashboard</NavLink>
         <NavLink className={cls} to="/targets">🎯 Targets</NavLink>
@@ -22,7 +21,7 @@ export default function Shell({ title, wide = false, headRight = null, children 
         <NavLink className={cls} to="/settings">⚙ Settings</NavLink>
         <span className="grow"></span>
         <div className="upgrade">
-          <b>Upgrade to Pro</b> <img className="astro" src="/hackjudge-mark.svg" alt="" /><br />
+          <b>Upgrade to Pro</b> <img className="astro" src="/astronaut.svg" alt="" /><br />
           Git freshness checks &amp; custom rubrics.<br />
           <Link className="btn sm" style={{ marginTop: 9 }} to="/pricing">See plans →</Link>
         </div>
