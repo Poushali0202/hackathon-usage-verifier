@@ -282,7 +282,7 @@ export default function Targets() {
           <button className={`tabbtn ${tab === 'platform' ? 'cur' : ''}`} onClick={() => setTab('platform')}>Platform &amp; deployment signals</button>
           <button className={`tabbtn ${tab === 'rubric' ? 'cur' : isPro ? '' : 'locked'}`}
                   onClick={() => (isPro ? setTab('rubric') : setPro(true))}>
-            Rubric &amp; weights{isPro ? '' : ' 🔒 PRO'}</button>
+            Rubric &amp; weights{isPro ? '' : ' 🔒 COMPANY'}</button>
         </div>
 
         {tab === 'code' && (
@@ -468,8 +468,8 @@ export default function Targets() {
         </p>
       </div>
 
-      <ProModal open={pro} onClose={() => setPro(false)} title="Custom rubric is a Pro feature">
-        <p>The Free plan scores with the default, battle-tested rubric. <b>Pro</b> lets you tune
+      <ProModal open={pro} onClose={() => setPro(false)} title="Custom rubric is a Company feature">
+        <p>The Developer plan scores with the default, battle-tested rubric. <b>Company</b> lets you tune
           the weights, tag thresholds and labels your judges score against.</p>
       </ProModal>
     </Shell>

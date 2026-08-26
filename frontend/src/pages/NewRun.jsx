@@ -153,15 +153,15 @@ export default function NewRun() {
                        onChange={e => setPenalty(e.target.value)} />
                 <div className="help">{isPro
                   ? 'Deducted when a project\'s history predates the event window. 0 = flag only.'
-                  : 'Pro controls how hard pre-event work is penalized.'}</div>
+                  : 'The Company plan controls how hard pre-event work is penalized.'}</div>
               </div>
             </div>
             <div className="lockcard">
-              <h3>🔒 PRO - Git freshness &amp; integrity checks</h3>
+              <h3>🔒 COMPANY - Git freshness &amp; integrity checks</h3>
               <p>Flag projects built before your event, detect commit-date rewrites, and set the
-                 penalty judges apply. {isPro ? <b>Enabled on your plan.</b> : <b>Locked on Free.</b>}</p>
+                 penalty judges apply. {isPro ? <b>Enabled on your plan.</b> : <b>Locked on Developer.</b>}</p>
               <button className="btn gold sm" onClick={() => setPro(true)}>
-                {isPro ? 'About Pro →' : 'Unlock with Pro →'}</button>
+                {isPro ? 'About Company →' : 'Unlock with Company →'}</button>
             </div>
           </>
         )}
@@ -216,7 +216,7 @@ export default function NewRun() {
         {step === 0 && !eventDate && <p className="help" style={{ textAlign: 'right' }}>Pick the event date to continue.</p>}
       </div>
 
-      <ProModal open={pro} onClose={() => setPro(false)} title="Git freshness & integrity is a Pro feature">
+      <ProModal open={pro} onClose={() => setPro(false)} title="Git freshness & integrity is a Company feature">
         <p>Pro verifies every project was built at your event: earliest-commit checks against the
           event window, commit-date tamper detection, and a judge-set penalty. It's enabled in this
           preview so you can evaluate it.</p>

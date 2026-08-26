@@ -2,8 +2,7 @@ import TopNav from '../components/TopNav.jsx'
 import { Link } from 'react-router-dom'
 
 // Blueprint Rev 2 (Joe-approved): no free tier, three prepaid tiers, tokens metered
-// live with a hard stop at zero. Tier NAMES + exact token allowances are still
-// Joe's call - the prices and feature lines below are the approved starting split.
+// live with a hard stop at zero. Exact token allowances are still being finalized.
 const TIERS = [
   ['Developer', '$20', 'For individual builders checking their own projects', [
     '1 custom target',
@@ -12,7 +11,7 @@ const TIERS = [
     'Excel export',
     'Starter verification allowance',
   ], false],
-  ['Organizer', '$100', 'For judging teams running an event', [
+  ['Company', '$100', 'For sponsors verifying usage of their own product', [
     'Everything in Developer',
     'Several targets',
     'Git freshness & commit-history integrity checks',
@@ -20,8 +19,8 @@ const TIERS = [
     'Larger batch sheets',
     'Mid verification allowance',
   ], true],
-  ['Enterprise', '$200', 'For sponsors verifying at scale', [
-    'Everything in Organizer',
+  ['Organizers', '$200', 'For event teams judging across many sponsors', [
+    'Everything in Company',
     'Unlimited targets & multi-target events',
     'Live streaming verification',
     'API access',
@@ -62,7 +61,7 @@ export default function Pricing() {
                 {feats.map(f => <li key={f}>{f}</li>)}
               </ul>
               <Link className={`btn sm ${mid ? 'gold' : 'ghost'}`} style={{ marginTop: 16, display: 'inline-block' }} to="/sign-in">
-                Get {name} →
+                Choose {name} →
               </Link>
             </div>
           ))}

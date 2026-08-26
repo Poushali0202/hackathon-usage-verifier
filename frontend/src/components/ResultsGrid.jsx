@@ -52,7 +52,7 @@ function Detail({ r, pro }) {
 
       {!pro && (r.event_window || null) && (
         <div className="lockcard" style={{ margin: '6px 0 10px' }}>
-          <h3>🔒 PRO - Commit-history integrity</h3>
+          <h3>🔒 COMPANY - Commit-history integrity</h3>
           <p style={{ margin: 0 }}>Built-on dates, pre-event flags and tamper detection for this
             project are available on the Pro plan.</p>
         </div>
@@ -98,7 +98,7 @@ function Detail({ r, pro }) {
                       {p.called ? '✓ called' : 'not called'}</td>
                     <td>{pro
                       ? (p.first_commit ? String(p.first_commit).slice(0, 10) : '-')
-                      : '🔒 Pro'}</td>
+                      : '🔒 Company'}</td>
                     <td className="mono" style={{ fontSize: 11, whiteSpace: 'pre-line' }}>
                       {(p.call_sites || []).slice(0, 3).map(s => `${s.file}:${s.line}`).join('\n') || '-'}</td>
                   </tr>
@@ -197,8 +197,8 @@ export default function ResultsGrid({ results, total, summary, exportName }) {
         </tbody>
       </table>
       <ProModal open={proModal} onClose={() => setProModal(false)}
-                title="Commit-history integrity is a Pro feature">
-        <p>Pro verifies every project was built at your event: earliest-commit dates against the
+                title="Commit-history integrity is a Company feature">
+        <p>The Company plan verifies every project was built at your event: earliest-commit dates against the
           event window, commit-date tamper detection, and a judge-set pre-event penalty.</p>
       </ProModal>
     </div>
@@ -220,7 +220,7 @@ function RowPair({ r, i, open, setOpen, pro, onLock }) {
         <td>{pro
           ? <BuiltOn r={r} />
           : <a href="#" style={{ fontSize: 12, fontWeight: 700 }}
-               onClick={e => { e.preventDefault(); e.stopPropagation(); onLock() }}>🔒 Pro</a>}
+               onClick={e => { e.preventDefault(); e.stopPropagation(); onLock() }}>🔒 Company</a>}
         </td>
         <td className="muted">{r.seconds ? `${Math.round(r.seconds)}s` : '-'}</td>
       </tr>

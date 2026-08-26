@@ -47,13 +47,13 @@ export default function Settings() {
           <div className="field" style={{ maxWidth: 260 }}>
             <label>Preview the app as</label>
             <select value={s.plan || 'pro'} onChange={e => setS({ ...s, plan: e.target.value })}>
-              <option value="pro">Pro (everything unlocked)</option>
-              <option value="free">Free (Pro features locked)</option>
+              <option value="pro">Company & up (everything unlocked)</option>
+              <option value="free">Developer (Company features locked)</option>
             </select>
           </div>
           <p className="muted" style={{ fontSize: 12, margin: 0 }}>
             Visual preview only - real entitlements arrive with marketplace billing (Stripe).
-            "Free" shows the locked Built-on column, integrity flags and penalty
+            "Developer" shows the locked Built-on column, integrity flags and penalty
             control, which is how the upsell will look.
           </p>
           <button className="btn sm" style={{ marginTop: 10 }} onClick={save}>{saved ? 'Saved ✓' : 'Save'}</button>

@@ -1,4 +1,4 @@
-// Small shared pieces: tag pill + Pro modal.
+// Small shared pieces: tag pill + tier-lock modal.
 export function TagPill({ tag, failed }) {
   if (failed) return <span className="tag err">FAILED</span>
   const t = (tag || 'None').toLowerCase()
@@ -15,7 +15,7 @@ export function ProModal({ open, onClose, title, children }) {
         <div style={{ fontSize: 13.5 }}>{children}</div>
         <div className="row" style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
           <button className="btn ghost sm" onClick={onClose}>Not now</button>
-          <a className="btn sm" href="/pricing">See Pro plans →</a>
+          <a className="btn sm" href="/pricing">See plans →</a>
         </div>
       </div>
     </div>

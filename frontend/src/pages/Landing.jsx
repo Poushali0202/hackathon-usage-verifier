@@ -65,8 +65,8 @@ export default function Landing() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginTop: 34, textAlign: 'left' }}>
           {[
             ['Ground-truth evidence', 'Every verdict cites the exact call sites, artifacts and commits it was scored on.'],
-            ['Built-at-the-event checks', 'Commit-history freshness and tamper flags with a judge-set penalty. Pro.'],
-            ['Any product, your rubric', 'Define your target - SDK, platform or API - and tune the weights. Pro.'],
+            ['Built-at-the-event checks', 'Commit-history freshness and tamper flags with a judge-set penalty. Company plan.'],
+            ['Any product, your rubric', 'Define your target - SDK, platform or API - and tune the weights. Company plan.'],
           ].map(([h, p]) => (
             <div key={h} className="glass" style={{ padding: 18 }}>
               <b>{h}</b>
