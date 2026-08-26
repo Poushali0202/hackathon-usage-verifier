@@ -46,9 +46,9 @@ export default function Settings() {
           <div className="eyebrow" style={{ marginBottom: 10 }}>Plan preview</div>
           <div className="field" style={{ maxWidth: 260 }}>
             <label>Preview the app as</label>
-            <select value={s.plan || 'pro'} onChange={e => setS({ ...s, plan: e.target.value })}>
-              <option value="pro">Company & up (everything unlocked)</option>
-              <option value="free">Developer (Company features locked)</option>
+            <select value={s.plan || 'company'} onChange={e => setS({ ...s, plan: e.target.value })}>
+              <option value="company">Company & up (everything unlocked)</option>
+              <option value="developer">Developer (Company features locked)</option>
             </select>
           </div>
           <p className="muted" style={{ fontSize: 12, margin: 0 }}>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ProModal, TagPill } from './bits.jsx'
+import { TierLockModal, TagPill } from './bits.jsx'
 import Tower from './Tower.jsx'
 import { exportExcel } from '../api.js'
 import { getPlan } from '../store.js'
@@ -25,7 +25,7 @@ const ext = (u) => (/^https?:\/\//i.test(u) ? u : `https://${u}`)
 const teamNames = (names) =>
   String(names || '').split(/[,;&/]|\band\b/i).map(s => s.trim()).filter(s => s.length > 1)
 
-function Detail({ r, pro }) {
+function Detail({ r, company }) {
   const team = teamNames(r.names)
   return (
     <td colSpan={6} style={{ padding: '10px 16px 18px' }}>
@@ -50,14 +50,14 @@ function Detail({ r, pro }) {
           <span className="techchip" style={{ alignSelf: 'center' }}>not deployed</span>}
       </div>
 
-      {!pro && (r.event_window || null) && (
+      {!company && (r.event_window || null) && (
         <div className="lockcard" style={{ margin: '6px 0 10px' }}>
           <h3>🔒 COMPANY - Commit-history integrity</h3>
           <p style={{ margin: 0 }}>Built-on dates, pre-event flags and tamper detection for this
             project are available on the Pro plan.</p>
         </div>
       )}
-      {pro && (r.project_predates || tampered(r)) && (
+      {company && (r.project_predates || tampered(r)) && (
         <div className="dqline">
           ⚠ <b>FLAGGED</b>{' '}
           {r.project_predates && <>- work goes back to <b>{String(r.earliest_commit || '').slice(0, 10)}</b>, before the event window {r.event_window ? `(${r.event_window[0]} → ${r.event_window[1]})` : ''}. </>}
@@ -66,7 +66,7 @@ function Detail({ r, pro }) {
           Judge-set penalty applied: <b>−{r.history_penalty ?? 2}</b> pts - judge's call.
         </div>
       )}
-      {pro && r.reused_pipelines?.length > 0 && (
+      {company && r.reused_pipelines?.length > 0 && (
         <div className="dqline" style={{ borderColor: 'rgba(245,158,11,.5)', background: '#FFF6E3' }}>
           ♻ Pipelines predating the event window: {r.reused_pipelines.join(', ')} (−1 reuse)
         </div>
@@ -96,7 +96,7 @@ function Detail({ r, pro }) {
                     <td>{p.complexity}</td>
                     <td style={{ color: p.called ? 'var(--green-strong)' : 'var(--muted)', fontWeight: 700 }}>
                       {p.called ? '✓ called' : 'not called'}</td>
-                    <td>{pro
+                    <td>{company
                       ? (p.first_commit ? String(p.first_commit).slice(0, 10) : '-')
                       : '🔒 Company'}</td>
                     <td className="mono" style={{ fontSize: 11, whiteSpace: 'pre-line' }}>
@@ -112,7 +112,7 @@ function Detail({ r, pro }) {
         <div style={{ margin: '8px 0 10px' }}>
           <div className="eyebrow" style={{ marginBottom: 6 }}>Score breakdown</div>
           {r.breakdown
-            .filter(b => pro || !/FLAGGED|predates/i.test(String(b.signal)))
+            .filter(b => company || !/FLAGGED|predates/i.test(String(b.signal)))
             .map((b, idx) => (
               <span key={idx} className={`bdchip ${b.points < 0 ? 'neg' : 'pos'}`}>
                 {b.points > 0 ? '+' : ''}{b.points} {b.signal}
@@ -168,8 +168,8 @@ function Detail({ r, pro }) {
 
 export default function ResultsGrid({ results, total, summary, exportName }) {
   const [open, setOpen] = useState(null)
-  const [proModal, setProModal] = useState(false)
-  const pro = getPlan() === 'pro'
+  const [lockModal, setLockModal] = useState(false)
+  const company = getPlan() === 'company'
   const done = results.length
   return (
     <div className="glass" style={{ padding: '6px 0 0' }}>
@@ -191,24 +191,24 @@ export default function ResultsGrid({ results, total, summary, exportName }) {
         </thead>
         <tbody>
           {results.map((r, i) => (
-            <RowPair key={i} r={r} i={i} open={open} setOpen={setOpen} pro={pro}
-                     onLock={() => setProModal(true)} />
+            <RowPair key={i} r={r} i={i} open={open} setOpen={setOpen} company={company}
+                     onLock={() => setLockModal(true)} />
           ))}
         </tbody>
       </table>
-      <ProModal open={proModal} onClose={() => setProModal(false)}
+      <TierLockModal open={lockModal} onClose={() => setLockModal(false)}
                 title="Commit-history integrity is a Company feature">
         <p>The Company plan verifies every project was built at your event: earliest-commit dates against the
           event window, commit-date tamper detection, and a judge-set pre-event penalty.</p>
-      </ProModal>
+      </TierLockModal>
     </div>
   )
 }
 
-function RowPair({ r, i, open, setOpen, pro, onLock }) {
+function RowPair({ r, i, open, setOpen, company, onLock }) {
   return (
     <>
-      <tr className={pro && flagged(r) ? 'flagged' : undefined} style={{ cursor: 'pointer' }}
+      <tr className={company && flagged(r) ? 'flagged' : undefined} style={{ cursor: 'pointer' }}
           onClick={() => setOpen(open === i ? null : i)}>
         <td>
           <b>{r.project || r.github}</b>
@@ -217,14 +217,14 @@ function RowPair({ r, i, open, setOpen, pro, onLock }) {
         <td><TagPill tag={r.tag} failed={r.classify_failed || r.repo_accessible === false} /></td>
         <td className="scorecell">{r.score != null ? Number(r.score).toFixed(1) : '-'}</td>
         <td>{r.backbone || '-'}</td>
-        <td>{pro
+        <td>{company
           ? <BuiltOn r={r} />
           : <a href="#" style={{ fontSize: 12, fontWeight: 700 }}
                onClick={e => { e.preventDefault(); e.stopPropagation(); onLock() }}>🔒 Company</a>}
         </td>
         <td className="muted">{r.seconds ? `${Math.round(r.seconds)}s` : '-'}</td>
       </tr>
-      {open === i && <tr><Detail r={r} pro={pro} /></tr>}
+      {open === i && <tr><Detail r={r} company={company} /></tr>}
     </>
   )
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Shell from '../components/Shell.jsx'
 import ResultsGrid from '../components/ResultsGrid.jsx'
-import { ProModal } from '../components/bits.jsx'
+import { TierLockModal } from '../components/bits.jsx'
 import LiveHint from '../components/LiveHint.jsx'
 import { listTargets, runBatch } from '../api.js'
 import { getPlan, getSettings } from '../store.js'
@@ -27,9 +27,9 @@ function Stepper({ step }) {
 export default function NewRun() {
   const nav = useNavigate()
   const defaults = getSettings()
-  const isPro = getPlan() === 'pro'
+  const isCompany = getPlan() === 'company'
   const [step, setStep] = useState(0)
-  const [pro, setPro] = useState(false)
+  const [lockOpen, setLockOpen] = useState(false)
 
   // step 1 - event
   const [name, setName] = useState('')
@@ -148,10 +148,10 @@ export default function NewRun() {
                 <div className="help">Commit-history checks measure against this date ± {defaults.grace_days ?? 2} grace days.</div>
               </div>
               <div className="field">
-                <label>Pre-event work penalty (pts) {!isPro && '🔒'}</label>
-                <input type="number" min="0" step="0.5" value={penalty} disabled={!isPro}
+                <label>Pre-event work penalty (pts) {!isCompany && '🔒'}</label>
+                <input type="number" min="0" step="0.5" value={penalty} disabled={!isCompany}
                        onChange={e => setPenalty(e.target.value)} />
-                <div className="help">{isPro
+                <div className="help">{isCompany
                   ? 'Deducted when a project\'s history predates the event window. 0 = flag only.'
                   : 'The Company plan controls how hard pre-event work is penalized.'}</div>
               </div>
@@ -159,9 +159,9 @@ export default function NewRun() {
             <div className="lockcard">
               <h3>🔒 COMPANY - Git freshness &amp; integrity checks</h3>
               <p>Flag projects built before your event, detect commit-date rewrites, and set the
-                 penalty judges apply. {isPro ? <b>Enabled on your plan.</b> : <b>Locked on Developer.</b>}</p>
-              <button className="btn gold sm" onClick={() => setPro(true)}>
-                {isPro ? 'About Company →' : 'Unlock with Company →'}</button>
+                 penalty judges apply. {isCompany ? <b>Enabled on your plan.</b> : <b>Locked on Developer.</b>}</p>
+              <button className="btn gold sm" onClick={() => setLockOpen(true)}>
+                {isCompany ? 'About Company →' : 'Unlock with Company →'}</button>
             </div>
           </>
         )}
@@ -216,11 +216,11 @@ export default function NewRun() {
         {step === 0 && !eventDate && <p className="help" style={{ textAlign: 'right' }}>Pick the event date to continue.</p>}
       </div>
 
-      <ProModal open={pro} onClose={() => setPro(false)} title="Git freshness & integrity is a Company feature">
+      <TierLockModal open={lockOpen} onClose={() => setLockOpen(false)} title="Git freshness & integrity is a Company feature">
         <p>Pro verifies every project was built at your event: earliest-commit checks against the
           event window, commit-date tamper detection, and a judge-set penalty. It's enabled in this
           preview so you can evaluate it.</p>
-      </ProModal>
+      </TierLockModal>
     </Shell>
   )
 }

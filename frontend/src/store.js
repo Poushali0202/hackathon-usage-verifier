@@ -6,9 +6,14 @@ const read = (k, fallback) => {
 }
 const write = (k, v) => localStorage.setItem(k, JSON.stringify(v))
 
-// plan is a VISUAL PREVIEW ONLY (default 'pro' - everyone gets everything until real
-// entitlements arrive via App Marketplace billing). 'free' shows the locked experience.
-export const getSettings = () =>
-  read('hj_settings', { grace_days: 2, history_penalty: 2, llm_key_set: false, plan: 'pro' })
+// plan is a VISUAL PREVIEW ONLY (default 'company' - everyone gets everything until real
+// entitlements arrive via App Marketplace billing). 'developer' shows the locked experience.
+// Values match the public tier names; legacy stored values are migrated on read.
+const LEGACY_PLANS = { pro: 'company', free: 'developer' }
+export const getSettings = () => {
+  const s = read('hj_settings', { grace_days: 2, history_penalty: 2, llm_key_set: false, plan: 'company' })
+  s.plan = LEGACY_PLANS[s.plan] || s.plan || 'company'
+  return s
+}
 export const saveSettings = (s) => write('hj_settings', s)
-export const getPlan = () => getSettings().plan || 'pro'
+export const getPlan = () => getSettings().plan

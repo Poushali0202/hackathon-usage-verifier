@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Shell from '../components/Shell.jsx'
-import { ProModal } from '../components/bits.jsx'
+import { TierLockModal } from '../components/bits.jsx'
 import { listTargets, createTarget, updateTarget, deleteTarget, extractTarget, testTarget } from '../api.js'
 import { TagPill } from '../components/bits.jsx'
 import { getPlan } from '../store.js'
@@ -60,8 +60,8 @@ export default function Targets() {
   const [sel, setSel] = useState(null)          // selected target object, or {isNew:true}
   const [form, setForm] = useState({})          // editable copy: {name, types, ...config}
   const [tab, setTab] = useState('code')
-  const [pro, setPro] = useState(false)
-  const isPro = getPlan() === 'pro'
+  const [lockOpen, setLockOpen] = useState(false)
+  const isCompany = getPlan() === 'company'
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   // "Prefill" assist (repo URL / docs URL / package name / uploaded files)
@@ -280,9 +280,9 @@ export default function Targets() {
         <div className="tabs">
           <button className={`tabbtn ${tab === 'code' ? 'cur' : ''}`} onClick={() => setTab('code')}>Code signals</button>
           <button className={`tabbtn ${tab === 'platform' ? 'cur' : ''}`} onClick={() => setTab('platform')}>Platform &amp; deployment signals</button>
-          <button className={`tabbtn ${tab === 'rubric' ? 'cur' : isPro ? '' : 'locked'}`}
-                  onClick={() => (isPro ? setTab('rubric') : setPro(true))}>
-            Rubric &amp; weights{isPro ? '' : ' 🔒 COMPANY'}</button>
+          <button className={`tabbtn ${tab === 'rubric' ? 'cur' : isCompany ? '' : 'locked'}`}
+                  onClick={() => (isCompany ? setTab('rubric') : setLockOpen(true))}>
+            Rubric &amp; weights{isCompany ? '' : ' 🔒 COMPANY'}</button>
         </div>
 
         {tab === 'code' && (
@@ -468,10 +468,10 @@ export default function Targets() {
         </p>
       </div>
 
-      <ProModal open={pro} onClose={() => setPro(false)} title="Custom rubric is a Company feature">
+      <TierLockModal open={lockOpen} onClose={() => setLockOpen(false)} title="Custom rubric is a Company feature">
         <p>The Developer plan scores with the default, battle-tested rubric. <b>Company</b> lets you tune
           the weights, tag thresholds and labels your judges score against.</p>
-      </ProModal>
+      </TierLockModal>
     </Shell>
   )
 }

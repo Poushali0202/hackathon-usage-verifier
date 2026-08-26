@@ -6,7 +6,7 @@ export function TagPill({ tag, failed }) {
   return <span className={`tag ${cls}`}>{tag || 'None'}</span>
 }
 
-export function ProModal({ open, onClose, title, children }) {
+export function TierLockModal({ open, onClose, title, children }) {
   if (!open) return null
   return (
     <div className="modal-bg open" onClick={e => e.target === e.currentTarget && onClose()}>

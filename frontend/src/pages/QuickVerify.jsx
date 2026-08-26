@@ -9,7 +9,7 @@ import { getPlan, getSettings } from '../store.js'
 // submissions sheet. Batch (whole event via spreadsheet) lives in the New run wizard.
 export default function QuickVerify() {
   const defaults = getSettings()
-  const isPro = getPlan() === 'pro'
+  const isCompany = getPlan() === 'company'
   const [urls, setUrls] = useState('')
   const [eventDate, setEventDate] = useState('')
   const [penalty, setPenalty] = useState(defaults.history_penalty ?? 2)
@@ -82,8 +82,8 @@ export default function QuickVerify() {
             <input type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} />
           </div>
           <div className="field">
-            <label>Pre-event penalty (pts) {!isPro && '🔒'}</label>
-            <input type="number" min="0" step="0.5" value={penalty} disabled={!isPro}
+            <label>Pre-event penalty (pts) {!isCompany && '🔒'}</label>
+            <input type="number" min="0" step="0.5" value={penalty} disabled={!isCompany}
                    onChange={e => setPenalty(e.target.value)} />
           </div>
         </div>
