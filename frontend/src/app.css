@@ -27,15 +27,6 @@ body{margin:0;min-height:100vh;color:var(--ink);
 a{color:var(--blue);text-decoration:none}
 .mono{font-family:"Ubuntu Mono",ui-monospace,Consolas,monospace}
 
-/* reviewer ribbon + switcher (mockup-only chrome; disappears in the real app) */
-.ribbon{position:fixed;top:0;left:0;right:0;z-index:99;display:flex;gap:14px;align-items:center;
-  padding:7px 16px;font-size:11.5px;color:#FAFBF8;background:var(--navy)}
-.ribbon b{letter-spacing:.08em;color:#FF8A78}
-.ribbon nav{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
-.ribbon nav a{color:#FAFBF8;font-weight:700;padding:2px 9px;border-radius:8px;opacity:.85}
-.ribbon nav a.cur,.ribbon nav a:hover{background:rgba(249,56,34,.35);opacity:1}
-.pagepad{padding-top:34px}
-
 /* cards */
 .glass{background:var(--panel);border:1px solid var(--bd-subtle);border-radius:12px;
   box-shadow:0 1px 2px rgba(30,26,52,.04),0 10px 28px -22px rgba(30,26,52,.16)}
@@ -55,7 +46,7 @@ a{color:var(--blue);text-decoration:none}
 
 /* top navigation (public pages) */
 .topnav{display:flex;align-items:center;gap:22px;padding:13px 30px;border-bottom:1px solid var(--bd-subtle);
-  position:sticky;top:34px;z-index:20;background:rgba(250,251,248,.94);backdrop-filter:blur(10px)}
+  position:sticky;top:0;z-index:20;background:rgba(250,251,248,.94);backdrop-filter:blur(10px)}
 .brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:16px;letter-spacing:-.2px;color:var(--ink2)}
 .brand img.logo{height:24px;width:auto;display:block}
 .brand img.logo.sm{height:19px}
@@ -64,7 +55,7 @@ a{color:var(--blue);text-decoration:none}
 .topnav .cta{margin-left:auto;display:flex;gap:10px;align-items:center}
 
 /* app shell (sidebar pages) */
-.shell{display:grid;grid-template-columns:218px 1fr;min-height:calc(100vh - 34px)}
+.shell{display:grid;grid-template-columns:218px 1fr;min-height:100vh}
 .side{border-right:1px solid var(--bd-subtle);padding:18px 14px;display:flex;flex-direction:column;gap:3px;
   background:var(--panel)}
 .side .brand{margin:2px 8px 18px}
