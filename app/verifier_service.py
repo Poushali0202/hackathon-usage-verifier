@@ -181,22 +181,22 @@ _ZERO = {"score": 0.0, "pipelines": [], "breakdown": [], "pipelines_called": 0,
          "repo_created_at": "", "history_penalty": None, "platform": {}, "tech": []}
 
 
-def _no_repo(row: dict) -> dict:
+def _no_repo(row: dict, tname: str = "RocketRide") -> dict:
     return {**row, **_ZERO, "repo_accessible": False, "description": "", "rocketride_usage": "",
             "tag": "None", "backbone": "No",
             "notes": "No GitHub repo provided - flag for correction; scored as ZERO",
-            "justification": "No GitHub repository was provided in the submission, so RocketRide "
+            "justification": f"No GitHub repository was provided in the submission, so {tname} "
             "usage cannot be verified from code - classified None / No and flagged for correction "
             "(score zero).", "evidence": []}
 
 
-def _inaccessible(row: dict, sig: dict) -> dict:
+def _inaccessible(row: dict, sig: dict, tname: str = "RocketRide") -> dict:
     return {**row, **_ZERO, "repo_accessible": False, "description": "", "rocketride_usage": "",
             "tag": "None", "backbone": "No",
             "notes": f"INACCESSIBLE (HTTP {sig.get('status', '?')}) - flag for correction: "
             "double-check the repo URL; scored as ZERO",
             "justification": f"The repository could not be accessed (HTTP {sig.get('status', '?')}), "
-            "so RocketRide usage cannot be verified from code - classified None / No and flagged "
+            f"so {tname} usage cannot be verified from code - classified None / No and flagged "
             "for correction (score zero).", "evidence": []}
 
 
@@ -240,18 +240,18 @@ async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = N
             label_from_repo = True
     project = row.get("project", "") or "(unnamed)"
 
+    tname = target.name if target else "RocketRide"
     if rb.repo_missing(url):
-        yield "result", {**_no_repo(row), "seconds": 0.0}
+        yield "result", {**_no_repo(row, tname), "seconds": 0.0}
         return
 
-    tname = target.name if target else "RocketRide"
     yield "stage", {"stage": "fetch", "engine": "local", "project": project,
                     "message": f"Gathering code + measuring {tname} usage - local Pipeline A"}
     evidence = await asyncio.to_thread(engine.gather, url, rb._gh, event_date, history_penalty,
                                        target)
 
     if not evidence.get("accessible"):
-        yield "result", {**_inaccessible(row, evidence), "seconds": round(time.perf_counter() - started, 1)}
+        yield "result", {**_inaccessible(row, evidence, tname), "seconds": round(time.perf_counter() - started, 1)}
         return
     if evidence.get("fetch_incomplete"):
         yield "result", {**_incomplete(row, evidence), "seconds": round(time.perf_counter() - started, 1)}
