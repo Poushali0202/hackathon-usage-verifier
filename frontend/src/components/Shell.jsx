@@ -21,7 +21,7 @@ export default function Shell({ title, wide = false, headRight = null, children 
         <NavLink className={cls} to="/settings">⚙ Settings</NavLink>
         <span className="grow"></span>
         <div className="upgrade">
-          <b>Upgrade to Pro</b> <img className="astro" src="/astronaut.svg" alt="" /><br />
+          <b>Upgrade your plan</b> <img className="astro" src="/astronaut.svg" alt="" /><br />
           Git freshness checks &amp; custom rubrics.<br />
           <Link className="btn sm" style={{ marginTop: 9 }} to="/pricing">See plans →</Link>
         </div>

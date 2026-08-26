@@ -1,41 +1,93 @@
 import TopNav from '../components/TopNav.jsx'
 import { Link } from 'react-router-dom'
 
+// Blueprint Rev 2 (Joe-approved): no free tier, three prepaid tiers, tokens metered
+// live with a hard stop at zero. Tier NAMES + exact token allowances are still
+// Joe's call - the prices and feature lines below are the approved starting split.
 const TIERS = [
-  ['Free', '$0', ['Unlimited runs', 'Define your product as the target (1)', 'Default rubric', 'Excel export'], false],
-  ['Pro', null, ['Everything in Free', 'Git freshness & integrity checks', 'Custom rubric & weights', 'Unlimited targets'], true],
-  ['Enterprise', 'Talk to us', ['Multi-target events', 'API access', 'Run telemetry integrity ("Full")'], false],
+  ['Developer', '$20', 'For individual builders checking their own projects', [
+    '1 custom target',
+    'Core scoring: verdict, backbone & evidence',
+    'Small batch sheets',
+    'Excel export',
+    'Starter verification allowance',
+  ], false],
+  ['Organizer', '$100', 'For judging teams running an event', [
+    'Everything in Developer',
+    'Several targets',
+    'Git freshness & commit-history integrity checks',
+    'Custom rubric & weights',
+    'Larger batch sheets',
+    'Mid verification allowance',
+  ], true],
+  ['Enterprise', '$200', 'For sponsors verifying at scale', [
+    'Everything in Organizer',
+    'Unlimited targets & multi-target events',
+    'Live streaming verification',
+    'API access',
+    'Unlimited batches, priority processing',
+    'Large verification allowance',
+  ], false],
+]
+
+const METER_POINTS = [
+  ['Prepaid only', 'Pay first, then use. No credit, no invoice-after-use.'],
+  ['Metered live', 'Every verification draws your balance down as it runs. 1 token = 1 repo verified.'],
+  ['Hard stop at zero', 'The next run is refused the instant the balance is empty. Usage can never exceed what you paid.'],
+  ['One-tap refill', 'Top up and work resumes immediately. Upgrades carry prorated tokens.'],
 ]
 
 export default function Pricing() {
   return (
     <>
       <TopNav />
-      <div style={{ maxWidth: 960, margin: '0 auto', padding: '46px 24px' }}>
+      <div style={{ maxWidth: 1020, margin: '0 auto', padding: '46px 24px' }}>
         <div className="eyebrow" style={{ textAlign: 'center' }}>pricing</div>
-        <h1 style={{ textAlign: 'center', margin: '8px 0 6px' }}>Simple plans for every event</h1>
+        <h1 style={{ textAlign: 'center', margin: '8px 0 6px' }}>Prepaid plans, metered by the repo</h1>
         <p className="muted" style={{ textAlign: 'center', margin: '0 0 30px' }}>
-          Billing arrives with the marketplace integration (Stripe). Final pricing
-          is being coordinated - amounts below are placeholders.
+          Every plan includes a prepaid verification allowance that meters down in real
+          time and stops at zero - you can never spend more than you've paid.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
-          {TIERS.map(([name, price, feats, pro]) => (
-            <div key={name} className="glass" style={{ padding: 22, borderColor: pro ? 'rgba(249,56,34,.5)' : undefined }}>
+          {TIERS.map(([name, price, who, feats, mid]) => (
+            <div key={name} className="glass" style={{ padding: 22, borderColor: mid ? 'rgba(249,56,34,.5)' : undefined }}>
               <h3 style={{ margin: 0 }}>
-                {name} {pro && <img className="astro" src="/astronaut.svg" alt="" />}
+                {name} {mid && <img className="astro" src="/astronaut.svg" alt="" />}
               </h3>
-              <div style={{ fontSize: 24, fontWeight: 800, margin: '6px 0 12px' }}>
-                {price ?? <span className="muted" style={{ fontSize: 15 }}>TBD</span>}
+              <div style={{ fontSize: 24, fontWeight: 800, margin: '6px 0 2px' }}>
+                {price}<span className="muted" style={{ fontSize: 13, fontWeight: 600 }}> prepaid</span>
               </div>
+              <p className="muted" style={{ fontSize: 12.5, margin: '0 0 12px' }}>{who}</p>
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: 1.9 }}>
                 {feats.map(f => <li key={f}>{f}</li>)}
               </ul>
-              <Link className={`btn sm ${pro ? 'gold' : 'ghost'}`} style={{ marginTop: 16, display: 'inline-block' }} to="/sign-in">
-                {pro ? 'Go Pro →' : 'Get started'}
+              <Link className={`btn sm ${mid ? 'gold' : 'ghost'}`} style={{ marginTop: 16, display: 'inline-block' }} to="/sign-in">
+                Get {name} →
               </Link>
             </div>
           ))}
         </div>
+
+        <div className="glass" style={{ padding: 22, marginTop: 18 }}>
+          <div className="eyebrow" style={{ marginBottom: 12 }}>How metering works</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14 }}>
+            {METER_POINTS.map(([t, d]) => (
+              <div key={t}>
+                <b style={{ fontSize: 13.5 }}>{t}</b>
+                <p className="muted" style={{ fontSize: 12.5, margin: '4px 0 0', lineHeight: 1.6 }}>{d}</p>
+              </div>
+            ))}
+          </div>
+          <p className="muted" style={{ fontSize: 12, margin: '14px 0 0' }}>
+            Behind the scenes: each run reserves its maximum possible cost before it starts
+            and settles the actual cost when it finishes, so a balance can never go negative.
+          </p>
+        </div>
+
+        <p className="muted" style={{ textAlign: 'center', fontSize: 12, margin: '18px 0 0' }}>
+          Checkout and refills arrive with the marketplace integration (Stripe).
+          Token allowances per tier are being finalized.
+        </p>
       </div>
     </>
   )
