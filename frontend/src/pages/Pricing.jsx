@@ -51,7 +51,7 @@ export default function Pricing() {
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
           {TIERS.map(([name, price, included, who, feats, mid]) => (
-            <div key={name} className="glass" style={{ padding: 22, borderColor: mid ? 'rgba(249,56,34,.5)' : undefined }}>
+            <div key={name} className={`glass plan${mid ? ' hot' : ''}`} style={{ padding: 22 }}>
               <h3 style={{ margin: 0 }}>
                 {name} {mid && <img className="astro" src="/astronaut.svg" alt="" />}
               </h3>
