@@ -30,6 +30,16 @@ a{color:var(--blue);text-decoration:none}
 /* cards */
 .glass{background:var(--panel);border:1px solid var(--bd-subtle);border-radius:12px;
   box-shadow:0 1px 2px rgba(30,26,52,.04),0 10px 28px -22px rgba(30,26,52,.16)}
+/* ?highlight=<tier>: pin the raised state on the tile the upgrade lock points at */
+.plan.active{transform:translateY(-4px);border-color:rgba(41,117,221,.55);
+  box-shadow:0 4px 10px rgba(30,26,52,.06),0 22px 44px -20px rgba(41,117,221,.30)}
+.plan.hot.active{border-color:rgba(249,56,34,.85);
+  box-shadow:0 4px 10px rgba(30,26,52,.06),0 22px 44px -20px rgba(249,56,34,.35)}
+[data-theme="dark"] .plan.active{box-shadow:0 22px 44px -20px rgba(0,0,0,.8),0 0 24px rgba(41,117,221,.18)}
+[data-theme="dark"] .plan.hot.active{box-shadow:0 22px 44px -20px rgba(0,0,0,.8),0 0 24px rgba(249,56,34,.28)}
+.planbadge{display:inline-block;margin:0 0 10px;padding:3px 11px;border-radius:999px;font-size:11px;
+  font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#fff;
+  background:linear-gradient(135deg,#F93822,#E5342B)}
 /* pricing tier tiles: lift on hover, settle on press */
 .plan{transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease}
 .plan:hover{transform:translateY(-4px);border-color:rgba(41,117,221,.55);

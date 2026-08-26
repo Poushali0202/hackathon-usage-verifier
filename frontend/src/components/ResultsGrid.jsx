@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { TierLockModal, TagPill } from './bits.jsx'
+import { Link } from 'react-router-dom'
+import { TagPill } from './bits.jsx'
 import Tower from './Tower.jsx'
 import { exportExcel } from '../api.js'
 import { getPlan } from '../store.js'
@@ -54,7 +55,8 @@ function Detail({ r, company }) {
         <div className="lockcard" style={{ margin: '6px 0 10px' }}>
           <h3>🔒 COMPANY - Commit-history integrity</h3>
           <p style={{ margin: 0 }}>Built-on dates, pre-event flags and tamper detection for this
-            project are available on the Pro plan.</p>
+            project are available on the Company plan.{' '}
+            <Link to="/pricing?highlight=company" style={{ fontWeight: 700 }}>Upgrade →</Link></p>
         </div>
       )}
       {company && (r.project_predates || tampered(r)) && (
@@ -98,7 +100,7 @@ function Detail({ r, company }) {
                       {p.called ? '✓ called' : 'not called'}</td>
                     <td>{company
                       ? (p.first_commit ? String(p.first_commit).slice(0, 10) : '-')
-                      : '🔒 Company'}</td>
+                      : <Link to="/pricing?highlight=company" style={{ fontWeight: 700 }}>🔒 Upgrade</Link>}</td>
                     <td className="mono" style={{ fontSize: 11, whiteSpace: 'pre-line' }}>
                       {(p.call_sites || []).slice(0, 3).map(s => `${s.file}:${s.line}`).join('\n') || '-'}</td>
                   </tr>
@@ -168,7 +170,6 @@ function Detail({ r, company }) {
 
 export default function ResultsGrid({ results, total, summary, exportName }) {
   const [open, setOpen] = useState(null)
-  const [lockModal, setLockModal] = useState(false)
   const company = getPlan() === 'company'
   const done = results.length
   return (
@@ -191,21 +192,15 @@ export default function ResultsGrid({ results, total, summary, exportName }) {
         </thead>
         <tbody>
           {results.map((r, i) => (
-            <RowPair key={i} r={r} i={i} open={open} setOpen={setOpen} company={company}
-                     onLock={() => setLockModal(true)} />
+            <RowPair key={i} r={r} i={i} open={open} setOpen={setOpen} company={company} />
           ))}
         </tbody>
       </table>
-      <TierLockModal open={lockModal} onClose={() => setLockModal(false)}
-                title="Commit-history integrity is a Company feature">
-        <p>The Company plan verifies every project was built at your event: earliest-commit dates against the
-          event window, commit-date tamper detection, and a judge-set pre-event penalty.</p>
-      </TierLockModal>
     </div>
   )
 }
 
-function RowPair({ r, i, open, setOpen, company, onLock }) {
+function RowPair({ r, i, open, setOpen, company }) {
   return (
     <>
       <tr className={company && flagged(r) ? 'flagged' : undefined} style={{ cursor: 'pointer' }}
@@ -219,8 +214,8 @@ function RowPair({ r, i, open, setOpen, company, onLock }) {
         <td>{r.backbone || '-'}</td>
         <td>{company
           ? <BuiltOn r={r} />
-          : <a href="#" style={{ fontSize: 12, fontWeight: 700 }}
-               onClick={e => { e.preventDefault(); e.stopPropagation(); onLock() }}>🔒 Company</a>}
+          : <Link to="/pricing?highlight=company" style={{ fontSize: 12, fontWeight: 700 }}
+                  onClick={e => e.stopPropagation()}>🔒 Upgrade</Link>}
         </td>
         <td className="muted">{r.seconds ? `${Math.round(r.seconds)}s` : '-'}</td>
       </tr>

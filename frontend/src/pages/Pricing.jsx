@@ -1,5 +1,6 @@
+import { useEffect } from 'react'
 import TopNav from '../components/TopNav.jsx'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 // Blueprint Rev 2 (Joe-approved): no free tier, three prepaid tiers, tokens metered
 // live with a hard stop at zero. Exact token allowances are still being finalized.
@@ -39,6 +40,15 @@ const METER_POINTS = [
 ]
 
 export default function Pricing() {
+  // ?highlight=<tier> (from in-app upgrade locks) pins that tile in its raised
+  // state and scrolls it into view, so the user lands on the plan to buy.
+  const [params] = useSearchParams()
+  const highlight = (params.get('highlight') || '').toLowerCase()
+  useEffect(() => {
+    if (!highlight) return
+    document.getElementById(`plan-${highlight}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [highlight])
   return (
     <>
       <TopNav />
@@ -51,7 +61,12 @@ export default function Pricing() {
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
           {TIERS.map(([name, price, included, who, feats, mid]) => (
-            <div key={name} className={`glass plan${mid ? ' hot' : ''}`} style={{ padding: 22 }}>
+            <div key={name} id={`plan-${name.toLowerCase()}`}
+                 className={`glass plan${mid ? ' hot' : ''}${highlight === name.toLowerCase() ? ' active' : ''}`}
+                 style={{ padding: 22 }}>
+              {highlight === name.toLowerCase() && (
+                <div className="planbadge">Unlocks the feature you clicked</div>
+              )}
               <h3 style={{ margin: 0 }}>
                 {name} {mid && <img className="astro" src="/astronaut.svg" alt="" />}
               </h3>
