@@ -180,4 +180,5 @@ async def get_run(rid: str, ident: Identity = Depends(current_identity)):
                 "total": r.total, "summary": r.summary,
                 "target_name": tname or "RocketRide",
                 "created_at": r.created_at.isoformat(),
+                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
                 "results": [x.payload for x in results]}

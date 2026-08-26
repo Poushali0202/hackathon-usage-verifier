@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import Shell from '../components/Shell.jsx'
 import ResultsGrid from '../components/ResultsGrid.jsx'
 import { getRun, stopRun } from '../api.js'
+import { runDuration } from '../format.js'
 
 export default function RunResults() {
   const { id } = useParams()
@@ -48,6 +49,8 @@ export default function RunResults() {
       <p className="muted" style={{ margin: '-8px 0 14px', fontSize: 13 }}>
         Target <b>{run.target_name || 'RocketRide'}</b> · event date {run.event_date || '-'} ·
         pre-event work penalty −{run.history_penalty ?? 2} pts
+        {run.created_at && ` · ran ${new Date(run.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`}
+        {runDuration(run) && ` (took ${runDuration(run)})`}
         {run.status === 'running' && ' · refreshing live'}
         {run.status === 'stopped' && ' · this run was stopped; results below are what completed'}
       </p>
