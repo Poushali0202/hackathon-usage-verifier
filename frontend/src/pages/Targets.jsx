@@ -146,8 +146,15 @@ export default function Targets() {
     setXBusy(false)
   }
 
-  const addSuggestion = (field, value) =>
-    set(field, [form[field], value].filter(Boolean).join(', '))
+  // chips toggle: click adds the token to the field below, click again removes it
+  const hasSuggestion = (field, value) =>
+    (form[field] || '').split(',').map(s => s.trim().toLowerCase()).includes(value.toLowerCase())
+  const addSuggestion = (field, value) => {
+    const items = (form[field] || '').split(',').map(s => s.trim()).filter(Boolean)
+    const i = items.findIndex(x => x.toLowerCase() === value.toLowerCase())
+    if (i >= 0) items.splice(i, 1); else items.push(value)
+    set(field, items.join(', '))
+  }
 
   async function runTest() {
     setTBusy(true); setTRes(null)
@@ -221,15 +228,23 @@ export default function Targets() {
                 {xInfo.suggestions.competitors && (
                   <div>Suggested competitors (not verified, click to add):{' '}
                     {xInfo.suggestions.competitors.split(',').map(s => s.trim()).filter(Boolean).map(s => (
-                      <button key={s} className="techchip" style={{ cursor: 'pointer' }}
-                              onClick={() => addSuggestion('competitors', s)}>{s}</button>
+                      <button key={s} type="button"
+                              className={`techchip${hasSuggestion('competitors', s) ? ' target' : ''}`}
+                              style={{ cursor: 'pointer' }}
+                              title={hasSuggestion('competitors', s) ? 'Added to Competing products - click to remove' : 'Add to Competing products'}
+                              onClick={() => addSuggestion('competitors', s)}>
+                        {hasSuggestion('competitors', s) ? '✓ ' : ''}{s}</button>
                     ))}</div>
                 )}
                 {xInfo.suggestions.neutral && (
                   <div style={{ marginTop: 4 }}>Suggested neutral tools:{' '}
                     {xInfo.suggestions.neutral.split(',').map(s => s.trim()).filter(Boolean).map(s => (
-                      <button key={s} className="techchip" style={{ cursor: 'pointer' }}
-                              onClick={() => addSuggestion('neutral', s)}>{s}</button>
+                      <button key={s} type="button"
+                              className={`techchip${hasSuggestion('neutral', s) ? ' target' : ''}`}
+                              style={{ cursor: 'pointer' }}
+                              title={hasSuggestion('neutral', s) ? 'Added to Neutral tools - click to remove' : 'Add to Neutral tools'}
+                              onClick={() => addSuggestion('neutral', s)}>
+                        {hasSuggestion('neutral', s) ? '✓ ' : ''}{s}</button>
                     ))}</div>
                 )}
               </div>
