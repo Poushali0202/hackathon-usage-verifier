@@ -599,8 +599,14 @@ def gather(url: str, gh, event_date: str | None = None,
         return {"accessible": True, "fetch_incomplete": True, "note": f"tree fetch failed (HTTP {st})"}
     paths = [x.get("path", "") for x in json.loads(tbody).get("tree", [])]
 
+    fetch_fails = [0]
+
     def raw(p):
-        return gh(f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{p}")[1]
+        st_f, body_f = gh(f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{p}")
+        if st_f != 200:
+            fetch_fails[0] += 1
+            return ""
+        return body_f
 
     pipes = [{"path": pp, "metrics": parse_pipe(raw(pp))}
              for pp in [p for p in paths if p.endswith(".pipe")][:12]]
@@ -704,6 +710,9 @@ def gather(url: str, gh, event_date: str | None = None,
                 break
 
     scaffold = any(p.endswith(".claude/rules/rocketride.md") for p in paths)
+    if fetch_fails[0]:
+        return {"accessible": True, "fetch_incomplete": True,
+                "note": f"{fetch_fails[0]} file fetch(es) failed - evidence would be partial"}
     return {
         "accessible": True, "file_count": len(paths),
         "tech": detect_tech(paths, manifest_texts, _gh_languages(gh, owner, repo)),
@@ -744,8 +753,14 @@ def _gather_generic(url: str, gh, event_date: str | None,
         return {"accessible": True, "fetch_incomplete": True, "note": f"tree fetch failed (HTTP {st})"}
     paths = [x.get("path", "") for x in json.loads(tbody).get("tree", [])]
 
+    fetch_fails = [0]
+
     def raw(p):
-        return gh(f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{p}")[1]
+        st_f, body_f = gh(f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{p}")
+        if st_f != 200:
+            fetch_fails[0] += 1
+            return ""
+        return body_f
 
     # committed artifacts / platform config files - path-substring evidence
     artifact_files = [p for p in paths
@@ -829,6 +844,9 @@ def _gather_generic(url: str, gh, event_date: str | None,
             except Exception:
                 tampered, earliest = [], ""
 
+    if fetch_fails[0]:
+        return {"accessible": True, "fetch_incomplete": True,
+                "note": f"{fetch_fails[0]} file fetch(es) failed - evidence would be partial"}
     return {
         "accessible": True, "file_count": len(paths),
         "tech": detect_tech(paths, manifest_texts, _gh_languages(gh, owner, repo)),
