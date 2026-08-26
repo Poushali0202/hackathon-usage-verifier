@@ -40,6 +40,7 @@ from .node_api import JOBS as NODE_JOBS, create_job as node_create_job  # noqa: 
 from .node_api import router as node_router  # noqa: E402
 import os  # noqa: E402
 from .authn import Identity, current_identity  # noqa: E402
+from .entitlements import LIMITS, check_rows, clamp_freshness, tenant_tier  # noqa: E402
 from .db_api import router as db_router  # noqa: E402
 from .runstate import ACTIVE as ACTIVE_RUNS  # noqa: E402
 from fastapi import Depends  # noqa: E402
@@ -284,12 +285,15 @@ async def legacy_index():
 async def verify_stream(req: VerifyRequest, ident: Identity = Depends(current_identity)):
     rows = [{"project": r.project or "", "github": r.github, "feedback": r.feedback or "",
              "demo": r.demo or "", "deployed": r.deployed or ""} for r in req.repos]
+    tier = await tenant_tier(ident.tenant_id)
+    check_rows(tier, len(rows))
+    event_date, history_penalty = clamp_freshness(tier, req.event_date, req.history_penalty)
     rb.fill_project_labels(rows)
-    run_id = await _new_run(ident, req.run_name, len(rows), req.event_date,
-                            req.history_penalty, req.target_id)
+    run_id = await _new_run(ident, req.run_name, len(rows), event_date,
+                            history_penalty, req.target_id)
     target = await _engine_target(req.target_id, ident.tenant_id)
-    return StreamingResponse(_run_stream(rows, event_date=req.event_date,
-                                         history_penalty=req.history_penalty, run_id=run_id,
+    return StreamingResponse(_run_stream(rows, event_date=event_date,
+                                         history_penalty=history_penalty, run_id=run_id,
                                          target=target),
                              media_type="application/x-ndjson")
 
@@ -319,6 +323,9 @@ async def batch(file: UploadFile = File(...), event_date: str | None = Form(None
                                      "(LLM column mapping also failed to find a GitHub column.)")
     if not rows:
         raise HTTPException(400, "No rows found in the uploaded file.")
+    tier = await tenant_tier(ident.tenant_id)
+    check_rows(tier, len(rows))
+    event_date, history_penalty = clamp_freshness(tier, event_date, history_penalty)
     rb.fill_project_labels(rows)
     run_id = await _new_run(ident, run_name or (file.filename or "").rsplit(".", 1)[0],
                             len(rows), event_date, history_penalty, target_id)
@@ -505,6 +512,12 @@ async def credentials_set(body: CredentialsBody, ident: Identity = Depends(curre
             await client.disconnect()
         except Exception:  # noqa: BLE001
             pass
+
+
+@app.get("/api/me")
+async def me(ident: Identity = Depends(current_identity)):
+    tier = await tenant_tier(ident.tenant_id)
+    return {"name": ident.name, "tier": tier, "limits": LIMITS[tier]}
 
 
 @app.get("/api/health")

@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from db.models import Result, Run, Target
 from db.session import SessionLocal
 
+from .entitlements import check_rubric, check_target_quota, tenant_tier
 from .authn import Identity, current_identity
 from .runstate import ACTIVE as ACTIVE_RUNS
 
@@ -71,6 +72,8 @@ async def list_targets(ident: Identity = Depends(current_identity)):
 
 @router.post("/targets")
 async def create_target(body: TargetIn, ident: Identity = Depends(current_identity)):
+    tier = await check_target_quota(ident.tenant_id)
+    check_rubric(tier, body.config)
     slug = _slugify(body.name)
     async with SessionLocal() as s:
         dup = (await s.execute(select(Target).where(
@@ -85,6 +88,7 @@ async def create_target(body: TargetIn, ident: Identity = Depends(current_identi
 
 @router.put("/targets/{tid}")
 async def update_target(tid: str, body: TargetIn, ident: Identity = Depends(current_identity)):
+    check_rubric(await tenant_tier(ident.tenant_id), body.config)
     async with SessionLocal() as s:
         t = (await s.execute(select(Target).where(
             Target.id == tid, Target.tenant_id == ident.tenant_id))).scalar_one_or_none()

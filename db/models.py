@@ -31,6 +31,7 @@ class Tenant(Base):
     __tablename__ = "tenants"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
     name: Mapped[str] = mapped_column(String(200))
+    tier: Mapped[str] = mapped_column(String(20), default="developer")  # developer|company|organizers
     # set when the org signs in through O-Connect; dev-stub tenants leave it NULL
     marketplace_org_id: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True)
     llm_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)   # BYOK (encrypted; wired later)
