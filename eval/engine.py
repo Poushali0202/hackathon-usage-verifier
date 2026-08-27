@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+from urllib.parse import quote
 
 from target import Target, load_preset  # noqa: F401  (eval/ dir is on sys.path wherever engine is imported)
 
@@ -602,7 +603,9 @@ def gather(url: str, gh, event_date: str | None = None,
     fetch_fails = [0]
 
     def raw(p):
-        st_f, body_f = gh(f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{p}")
+        # tree paths go into the URL verbatim otherwise: a space or '#' would 404
+        # on every attempt and wrongly defer the repo forever
+        st_f, body_f = gh(f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{quote(p)}")
         if st_f != 200:
             fetch_fails[0] += 1
             return ""
@@ -657,7 +660,6 @@ def gather(url: str, gh, event_date: str | None = None,
     win = event_window(event_date)
     project_predates, tampered, earliest = None, [], ""
     if win:
-        from urllib.parse import quote
         for pe in pipes:
             st, cbody = gh(f"https://api.github.com/repos/{owner}/{repo}/commits"
                            f"?path={quote(pe['path'])}&per_page=100")
@@ -756,7 +758,9 @@ def _gather_generic(url: str, gh, event_date: str | None,
     fetch_fails = [0]
 
     def raw(p):
-        st_f, body_f = gh(f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{p}")
+        # tree paths go into the URL verbatim otherwise: a space or '#' would 404
+        # on every attempt and wrongly defer the repo forever
+        st_f, body_f = gh(f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{quote(p)}")
         if st_f != 200:
             fetch_fails[0] += 1
             return ""
