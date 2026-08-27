@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Shell from '../components/Shell.jsx'
 import ResultsGrid from '../components/ResultsGrid.jsx'
-import { TierLockModal } from '../components/bits.jsx'
+import { TierLockModal, AllowanceWarning } from '../components/bits.jsx'
 import LiveHint from '../components/LiveHint.jsx'
 import { listTargets, runBatch } from '../api.js'
 import { getPlan, getSettings } from '../store.js'
@@ -65,7 +65,7 @@ export default function NewRun() {
     setRun({ ...base })
     const onEvent = (ev) => {
       const r = runRef.current
-      if (ev.event === 'start') { r.total = ev.total; r.id = ev.run_id || r.id }
+      if (ev.event === 'start') { r.total = ev.total; r.id = ev.run_id || r.id; r.allowance = ev.allowance }
       else if (ev.event === 'result') r.results = [...r.results, ev.result]
       else if (ev.event === 'stage') r.stage = `#${ev.index} ${ev.stage || ev.message || ''}`
       else if (ev.event === 'done') { r.status = 'done'; r.summary = ev.summary }
@@ -116,6 +116,7 @@ export default function NewRun() {
         {run.status === 'error' && (
           <div className="dqline">Run failed: {run.error}. Is the API up? (uvicorn app.main:app - or set VITE_API_TARGET)</div>
         )}
+        <AllowanceWarning a={run.allowance} />
         <ResultsGrid results={run.results} total={run.total} summary={run.summary}
                      exportName={`${run.name.replace(/\s+/g, '_')}.xlsx`} />
         {run.status !== 'running' && (

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Shell from '../components/Shell.jsx'
 import ResultsGrid from '../components/ResultsGrid.jsx'
+import { AllowanceWarning } from '../components/bits.jsx'
 import { listTargets, runLive } from '../api.js'
 import { getPlan, getSettings } from '../store.js'
 
@@ -34,7 +35,8 @@ export default function QuickVerify() {
     setRun({ ...base })
     const onEvent = (ev) => {
       const r = runRef.current
-      if (ev.event === 'result') r.results = [...r.results, ev.result]
+      if (ev.event === 'start') r.allowance = ev.allowance
+      else if (ev.event === 'result') r.results = [...r.results, ev.result]
       else if (ev.event === 'stage') r.stage = `#${ev.index} ${ev.stage || ev.message || ''}`
       else if (ev.event === 'done') { r.status = 'done'; r.summary = ev.summary }
       setRun({ ...r })
@@ -105,6 +107,7 @@ export default function QuickVerify() {
       )}
       {run?.results?.length > 0 && (
         <div style={{ marginTop: 18 }}>
+          <AllowanceWarning a={run.allowance} />
           <ResultsGrid results={run.results} total={run.total} summary={run.summary}
                        exportName="quick-verify.xlsx" />
           <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>

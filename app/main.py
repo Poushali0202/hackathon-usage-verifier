@@ -40,7 +40,7 @@ from .node_api import JOBS as NODE_JOBS, create_job as node_create_job  # noqa: 
 from .node_api import router as node_router  # noqa: E402
 import os  # noqa: E402
 from .authn import Identity, current_identity  # noqa: E402
-from .entitlements import LIMITS, check_rows, clamp_freshness, tenant_tier  # noqa: E402
+from .entitlements import LIMITS, check_rows, clamp_freshness, run_allowance_advisory, tenant_tier  # noqa: E402
 from .db_api import router as db_router  # noqa: E402
 from .runstate import ACTIVE as ACTIVE_RUNS  # noqa: E402
 from fastapi import Depends  # noqa: E402
@@ -183,14 +183,15 @@ async def _new_run(ident: Identity, run_name: str | None, total: int,
 async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY,
                       event_date: str | None = None, history_penalty: float | None = None,
                       run_id: str | None = None, target: "EngineTarget | None" = None,
-                      kb_budget: float | None = None):
+                      kb_budget: float | None = None, allowance: dict | None = None):
     """Shared NDJSON generator for live + batch. Repos are verified CONCURRENTLY (up to
     `concurrency` at a time); each verify_row's stage/result events are merged into one output
     stream via a queue, so a large batch finishes ~concurrency-times faster than one-at-a-time.
     Each result is ALSO persisted to the run row as it arrives, so the run survives restarts
     and disconnects. The Excel is NOT built here - the browser builds it via /api/export."""
     total = len(rows)
-    yield _ndjson({"event": "start", "total": total, "run_id": run_id})
+    yield _ndjson({"event": "start", "total": total, "run_id": run_id,
+                   **({"allowance": allowance} if allowance else {})})
     results: list[dict] = []
     q: asyncio.Queue = asyncio.Queue()
     sem = asyncio.Semaphore(max(1, concurrency))
@@ -210,7 +211,8 @@ async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY,
                         "notes": f"SKIPPED - run allowance exhausted ({mb} MB per run on this plan)",
                         "justification": f"This row was not verified: the run reached its {mb} MB "
                         "processing allowance before this repo started. Upgrade for a larger "
-                        "allowance or split the sheet and rerun the remaining rows."}))
+                        "allowance, split the sheet and rerun the remaining rows, or use "
+                        "metered billing for the overage once checkout lands."}))
                     return
                 async for kind, payload in verify_row(row, pool, event_date, history_penalty,
                                                       target):
@@ -311,7 +313,8 @@ async def verify_stream(req: VerifyRequest, ident: Identity = Depends(current_id
     target = await _engine_target(req.target_id, ident.tenant_id)
     return StreamingResponse(_run_stream(rows, event_date=event_date,
                                          history_penalty=history_penalty, run_id=run_id,
-                                         target=target, kb_budget=LIMITS[tier]["run_kb"]),
+                                         target=target, kb_budget=LIMITS[tier]["run_kb"],
+                                         allowance=run_allowance_advisory(tier, len(rows))),
                              media_type="application/x-ndjson")
 
 
@@ -349,7 +352,8 @@ async def batch(file: UploadFile = File(...), event_date: str | None = Form(None
     target = await _engine_target(target_id, ident.tenant_id)
     return StreamingResponse(_run_stream(rows, event_date=event_date,
                                          history_penalty=history_penalty, run_id=run_id,
-                                         target=target, kb_budget=LIMITS[tier]["run_kb"]),
+                                         target=target, kb_budget=LIMITS[tier]["run_kb"],
+                                         allowance=run_allowance_advisory(tier, len(rows))),
                              media_type="application/x-ndjson")
 
 

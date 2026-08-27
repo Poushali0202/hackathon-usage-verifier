@@ -69,3 +69,22 @@ def clamp_freshness(tier: str, event_date, history_penalty):
     if LIMITS[tier]["freshness"]:
         return event_date, history_penalty
     return None, None
+
+
+AVG_REPO_KB = 500          # the average used on the pricing page and in estimates
+_NEXT_TIER = {"developer": "company", "company": "organizers"}
+
+
+def run_allowance_advisory(tier: str, n_rows: int) -> dict | None:
+    """Pre-run estimate (rows x average repo size) against the tier's run budget.
+    Advisory only - never blocks, since small repos can fit where the estimate
+    says they won't. The stream's settled KB meter is the actual enforcement."""
+    budget = LIMITS[tier]["run_kb"]
+    if budget is None:
+        return None
+    est = n_rows * AVG_REPO_KB
+    if est <= budget:
+        return None
+    return {"budget_kb": budget, "estimated_kb": est, "overage_kb": est - budget,
+            "est_verified_rows": max(1, int(budget // AVG_REPO_KB)),
+            "next_tier": _NEXT_TIER.get(tier)}

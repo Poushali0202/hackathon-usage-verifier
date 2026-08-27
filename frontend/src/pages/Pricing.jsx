@@ -36,7 +36,7 @@ const METER_POINTS = [
   ['One simple rate', '$5 per MB of code verified, on every plan. An average repo is 500 KB, so about $2.50 per repo.'],
   ['Prepaid & metered live', 'Pay first, then use. Every verification draws your balance down by the code it actually scans.'],
   ['Hard stop at zero', 'The next run is refused the instant the balance is empty. Usage can never exceed what you paid.'],
-  ['One-tap refill', 'Top up at the same $5/MB rate and work resumes immediately. Upgrades carry your remaining balance.'],
+  ['Metered top-ups', 'Going past your allowance uses metered billing at a premium per-KB rate - plans are far cheaper per MB, so upgrading beats topping up. Arrives with checkout.'],
 ]
 
 export default function Pricing() {
