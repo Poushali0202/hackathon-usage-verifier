@@ -305,6 +305,8 @@ async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = N
         "notes": note + (" [explanation pending - cloud classifier unreachable]" if explain_failed else ""),
         "evidence": engine.evidence_lines(ev),
         "seconds": round(time.perf_counter() - started, 1),
+        "kb_processed": round(sum(len(f.get("text") or "") for f in
+                                  (evidence.get("source_files") or [])) / 1024, 1),
     }
 
 

@@ -14,10 +14,14 @@ from db.session import SessionLocal
 # legacy names from earlier drafts map onto the final tiers
 _ALIASES = {"enterprise": "organizers", "pro": "company", "free": "developer"}
 
+# run_kb is the per-run processing budget (the tier's included allowance) - the
+# interim, unfunded form of the pipeline's reserve-then-settle gate. Real depleting
+# prepaid balances replace it when Stripe/marketplace billing lands. rows stays as a
+# cheap pre-check on sheet shape; run_kb is what actually enforces cost intent.
 LIMITS = {
-    "developer":  {"targets": 1,    "rows": 10,   "freshness": False},
-    "company":    {"targets": 5,    "rows": 250,  "freshness": True},
-    "organizers": {"targets": None, "rows": None, "freshness": True},
+    "developer":  {"targets": 1,    "rows": 10,   "run_kb": 4000,  "freshness": False},
+    "company":    {"targets": 5,    "rows": 250,  "run_kb": 20000, "freshness": True},
+    "organizers": {"targets": None, "rows": None, "run_kb": None,  "freshness": True},
 }
 
 

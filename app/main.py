@@ -139,7 +139,7 @@ def _public(r: dict) -> dict:
     out = {k: r.get(k) for k in (
         "project", "github", "tag", "backbone", "description", "rocketride_usage",
         "justification", "notes", "evidence", "seconds", "demo", "deployed",
-        "names", "emails", "repo_accessible", "classify_failed",
+        "names", "emails", "repo_accessible", "classify_failed", "kb_processed",
         # deterministic evaluation payload (ground-truth table + score + freshness/integrity)
         "score", "pipelines", "breakdown", "pipelines_called", "pipelines_total",
         "other_platforms", "explain_failed", "event_window", "reused_pipelines",
@@ -182,7 +182,8 @@ async def _new_run(ident: Identity, run_name: str | None, total: int,
 
 async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY,
                       event_date: str | None = None, history_penalty: float | None = None,
-                      run_id: str | None = None, target: "EngineTarget | None" = None):
+                      run_id: str | None = None, target: "EngineTarget | None" = None,
+                      kb_budget: float | None = None):
     """Shared NDJSON generator for live + batch. Repos are verified CONCURRENTLY (up to
     `concurrency` at a time); each verify_row's stage/result events are merged into one output
     stream via a queue, so a large batch finishes ~concurrency-times faster than one-at-a-time.
@@ -194,11 +195,27 @@ async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY,
     q: asyncio.Queue = asyncio.Queue()
     sem = asyncio.Semaphore(max(1, concurrency))
 
+    kb_used = {"v": 0.0}   # settled AFTER each repo, like the pipeline's token ledger;
+    # up to `concurrency` in-flight repos can overshoot the budget, never more.
+
     async def worker(i: int, row: dict):
         try:
             async with sem:
+                if kb_budget is not None and kb_used["v"] >= kb_budget:
+                    mb = round(kb_budget / 1000)
+                    await q.put(("result", i, {**row, "repo_accessible": None,
+                        "classify_failed": False, "tag": "None", "backbone": "No",
+                        "description": "", "rocketride_usage": "", "evidence": [],
+                        "seconds": 0.0, "kb_processed": 0.0,
+                        "notes": f"SKIPPED - run allowance exhausted ({mb} MB per run on this plan)",
+                        "justification": f"This row was not verified: the run reached its {mb} MB "
+                        "processing allowance before this repo started. Upgrade for a larger "
+                        "allowance or split the sheet and rerun the remaining rows."}))
+                    return
                 async for kind, payload in verify_row(row, pool, event_date, history_penalty,
                                                       target):
+                    if kind == "result":
+                        kb_used["v"] += float(payload.get("kb_processed") or 0.0)
                     await q.put((kind, i, payload))
         except Exception as e:  # noqa: BLE001 - surface a failed row rather than hang the batch
             await q.put(("result", i, {**row, "repo_accessible": True, "classify_failed": True,
@@ -294,7 +311,7 @@ async def verify_stream(req: VerifyRequest, ident: Identity = Depends(current_id
     target = await _engine_target(req.target_id, ident.tenant_id)
     return StreamingResponse(_run_stream(rows, event_date=event_date,
                                          history_penalty=history_penalty, run_id=run_id,
-                                         target=target),
+                                         target=target, kb_budget=LIMITS[tier]["run_kb"]),
                              media_type="application/x-ndjson")
 
 
@@ -332,7 +349,7 @@ async def batch(file: UploadFile = File(...), event_date: str | None = Form(None
     target = await _engine_target(target_id, ident.tenant_id)
     return StreamingResponse(_run_stream(rows, event_date=event_date,
                                          history_penalty=history_penalty, run_id=run_id,
-                                         target=target),
+                                         target=target, kb_budget=LIMITS[tier]["run_kb"]),
                              media_type="application/x-ndjson")
 
 
