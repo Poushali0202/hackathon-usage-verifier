@@ -15,7 +15,7 @@ from db.session import SessionLocal
 _ALIASES = {"enterprise": "organizers", "pro": "company", "free": "developer"}
 
 LIMITS = {
-    "developer":  {"targets": 1,    "rows": 25,   "freshness": False},
+    "developer":  {"targets": 1,    "rows": 10,   "freshness": False},
     "company":    {"targets": 5,    "rows": 250,  "freshness": True},
     "organizers": {"targets": None, "rows": None, "freshness": True},
 }

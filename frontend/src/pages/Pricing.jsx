@@ -11,7 +11,7 @@ const TIERS = [
    'For individual builders checking their own projects', [
     '1 custom target',
     'Core scoring: verdict, backbone & evidence',
-    'Small batch sheets',
+    'Batch sheets up to 10 repos',
     'Excel export',
   ], false],
   ['Company', '$100', '20 MB included · about 40 repos',
@@ -20,7 +20,7 @@ const TIERS = [
     'Several targets',
     'Git freshness & commit-history integrity checks',
     'Custom rubric & weights',
-    'Larger batch sheets',
+    'Batch sheets up to 250 repos',
   ], true],
   ['Organizers', '$200', '40 MB included · about 80 repos',
    'For event teams judging across many sponsors', [
