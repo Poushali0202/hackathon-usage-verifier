@@ -21,6 +21,10 @@ Thumbs.db
 # frontend
 frontend/node_modules/
 
+# RocketRide shell app (branch rocketride-shell)
+judge-hack-ui/node_modules/
+judge-hack-ui/dist/
+
 
 # local dev database
 hackjudge.db

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- RocketRide astronaut riding the rocket. Helmet CLOSED, visor opaque - no face (brand rule). -->
+  <defs>
+    <linearGradient id="suit" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E9E6DC"/>
+    </linearGradient>
+    <linearGradient id="visor" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#332E56"/>
+      <stop offset=".55" stop-color="#1E1A34"/>
+      <stop offset="1" stop-color="#110F26"/>
+    </linearGradient>
+    <linearGradient id="pack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EFEDE5"/>
+      <stop offset="1" stop-color="#D8D5C9"/>
+    </linearGradient>
+    <linearGradient id="rocket" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FF6A50"/>
+      <stop offset="1" stop-color="#DE2B15"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFC46B"/>
+      <stop offset="1" stop-color="#F93822"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(-34 48 48)">
+    <path d="M26 55 Q8 60.5 26 66 Q19 60.5 26 55 Z" fill="url(#flame)"/>
+    <path d="M26 57 Q15 60.5 26 64 Q21 60.5 26 57 Z" fill="#FFE3B3" opacity=".95"/>
+    <path d="M28 53 L18 41 Q25 48 32 52 Z" fill="#1E1A34"/>
+    <path d="M28 68 L18 80 Q25 73 32 69 Z" fill="#1E1A34"/>
+    <rect x="48" y="65" width="6.5" height="9" rx="3.25" transform="rotate(-10 48 65)" fill="#E2DFD4"/>
+    <rect x="26" y="52" width="42" height="17" rx="8.5" fill="url(#rocket)" stroke="rgba(30,26,52,.3)" stroke-width="1.4"/>
+    <path d="M68 52 Q82 55.5 86 60.5 Q82 65.5 68 69 Z" fill="#1E1A34"/>
+    <circle cx="58" cy="60.5" r="4.6" fill="#DCE9FB" stroke="#FFFFFF" stroke-width="1.8"/>
+    <rect x="44" y="21" width="13" height="7" rx="3.5" transform="rotate(-55 44 28)"
+          fill="url(#suit)" stroke="rgba(30,26,52,.28)" stroke-width="1.3"/>
+    <rect x="33" y="31" width="7.5" height="13" rx="3.75" fill="url(#pack)" stroke="rgba(30,26,52,.26)" stroke-width="1.2"/>
+    <rect x="38" y="28" width="15" height="19" rx="7" transform="rotate(6 45.5 37.5)"
+          fill="url(#suit)" stroke="rgba(30,26,52,.3)" stroke-width="1.4"/>
+    <rect x="47.2" y="34.5" width="5.6" height="4.6" rx="2" fill="#F93822"/>
+    <rect x="45" y="31" width="14" height="7" rx="3.5" transform="rotate(38 46 32)"
+          fill="url(#suit)" stroke="rgba(30,26,52,.28)" stroke-width="1.3"/>
+    <rect x="44.5" y="44" width="8" height="16" rx="4" transform="rotate(-14 48.5 52)"
+          fill="url(#suit)" stroke="rgba(30,26,52,.28)" stroke-width="1.3"/>
+    <rect x="40" y="25.5" width="11" height="4.5" rx="2.25" fill="#D8D5C9"/>
+    <circle cx="45.5" cy="19" r="11" fill="url(#suit)" stroke="rgba(30,26,52,.3)" stroke-width="1.4"/>
+    <ellipse cx="49" cy="19.6" rx="7" ry="6.4" fill="url(#visor)"/>
+    <path d="M44.6 15.6 q2.6 -2.6 6 -2" stroke="rgba(255,255,255,.85)" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+    <circle cx="53.6" cy="15.4" r=".95" fill="rgba(255,255,255,.75)"/>
+  </g>
+</svg>

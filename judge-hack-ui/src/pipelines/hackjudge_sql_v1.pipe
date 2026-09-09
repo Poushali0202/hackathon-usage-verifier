@@ -1,0 +1,121 @@
+{
+  "components": [
+    {
+      "id": "chat_1",
+      "provider": "chat",
+      "name": "SQL Source",
+      "config": {
+        "hideForm": true,
+        "mode": "Source",
+        "parameters": {},
+        "type": "chat"
+      }
+    },
+    {
+      "id": "agent_1",
+      "provider": "agent_rocketride",
+      "name": "SQL Tool Host",
+      "config": {
+        "instructions": [
+          "You are only here so the SQL node can be invoked as a tool. Do not answer the user. Do not call any tool. Do not invent SQL or JSON. If you receive a chat message, reply with exactly: WAITING_FOR_TOOL"
+        ],
+        "max_waves": 1,
+        "parameters": {}
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "chat_1"
+        }
+      ]
+    },
+    {
+      "id": "llm_1",
+      "provider": "llm_anthropic",
+      "name": "Anthropic",
+      "config": {
+        "profile": "claude-haiku-4-5",
+        "claude-haiku-4-5": {
+          "apikey": "${ROCKETRIDE_ANTHROPIC_KEY}"
+        },
+        "parameters": {}
+      },
+      "control": [
+        {
+          "classType": "llm",
+          "from": "agent_1"
+        },
+        {
+          "classType": "llm",
+          "from": "sql_1"
+        }
+      ]
+    },
+    {
+      "id": "memory_1",
+      "provider": "memory_internal",
+      "name": "Execution Memory",
+      "config": {
+        "type": "memory_internal"
+      },
+      "control": [
+        {
+          "classType": "memory",
+          "from": "agent_1"
+        }
+      ]
+    },
+    {
+      "id": "sql_1",
+      "provider": "rocketride_sql",
+      "name": "Judge Hack SQL",
+      "config": {
+        "profile": "default",
+        "default": {
+          "allow_execute": true,
+          "table": "hj_runs",
+          "db_description": "Judge Hack runs and custom targets. Deterministic app SQL via execute; the LLM does not invent schema or rows.",
+          "max_attempts": 1
+        },
+        "parameters": {}
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "chat_1"
+        }
+      ],
+      "control": [
+        {
+          "classType": "tool",
+          "from": "agent_1"
+        }
+      ]
+    },
+    {
+      "id": "response_1",
+      "provider": "response_answers",
+      "name": "Return SQL",
+      "config": {
+        "laneName": "answers"
+      },
+      "input": [
+        {
+          "lane": "answers",
+          "from": "agent_1"
+        }
+      ]
+    }
+  ],
+  "name": "Judge Hack SQL V1",
+  "description": "Staging-managed SQL for runs and custom targets. allow_execute is on so the app issues literal statements; the LLM never writes rows.",
+  "source": "chat_1",
+  "isLocked": false,
+  "project_id": "d1cd587f-24b3-4f21-a7f0-22650844b8eb",
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "version": 1
+}

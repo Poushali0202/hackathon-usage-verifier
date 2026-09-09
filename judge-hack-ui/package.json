@@ -1,0 +1,126 @@
+{
+  "name": "hackjudge-judge-hack",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fast, evidence-based verification of RocketRide usage in hackathon repositories.",
+  "license": "MIT",
+  "appManifest": {
+    "id": "hackjudge.judge-hack",
+    "publisher": "hackjudge",
+    "name": "Judge Hack",
+    "description": "Fast, evidence-based verification of RocketRide usage in hackathon repositories.",
+    "icon": "./icon.svg",
+    "readme": "./README.md",
+    "categories": [
+      "developer-tools",
+      "productivity"
+    ],
+    "mode": "subscription",
+    "authenticated": true,
+    "projectId": "bde4acbb-7db2-4a97-8d01-28214a1bc284",
+    "billing": {
+      "plans": [
+        {
+          "nickname": "Developer",
+          "amountCents": 2000,
+          "currency": "usd",
+          "interval": "one_time",
+          "metadata": {
+            "order": 1,
+            "description": "4 MB included · about 8 repos. Core scoring, Excel export, batches up to 10 repos.",
+            "features": [
+              "core-scoring",
+              "excel-export"
+            ]
+          }
+        },
+        {
+          "nickname": "Company",
+          "amountCents": 10000,
+          "currency": "usd",
+          "interval": "one_time",
+          "metadata": {
+            "order": 2,
+            "description": "20 MB included · about 40 repos. Git freshness, custom scoring, batches up to 250 repos.",
+            "features": [
+              "core-scoring",
+              "excel-export",
+              "git-freshness",
+              "custom-rubric"
+            ]
+          }
+        },
+        {
+          "nickname": "Organizers",
+          "amountCents": 20000,
+          "currency": "usd",
+          "interval": "one_time",
+          "metadata": {
+            "order": 3,
+            "description": "40 MB included · about 80 repos. Unlimited targets, live streaming, API access.",
+            "features": [
+              "core-scoring",
+              "excel-export",
+              "git-freshness",
+              "custom-rubric",
+              "organizers"
+            ]
+          }
+        }
+      ]
+    },
+    "contributes": {
+      "configuration": {
+        "title": "Judge Hack",
+        "properties": {
+          "hackjudge.judge-hack.graceDays": {
+            "type": "integer",
+            "default": 2,
+            "description": "Days on either side of the event date that still count as in-window.",
+            "order": 1
+          },
+          "hackjudge.judge-hack.historyPenalty": {
+            "type": "number",
+            "default": 2,
+            "description": "Points deducted when a project's git history predates the event window (0 = flag only).",
+            "order": 2
+          },
+          "hackjudge.judge-hack.storeVariant": {
+            "type": "string",
+            "default": "default",
+            "enum": ["default", "external"],
+            "description": "SQL store: default = staging-managed rocketride_sql. external = db_postgres fallback only if the broker probe fails.",
+            "order": 3
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "dev": "rsbuild dev",
+    "gen": "node tools/gen-evaluator-bundle.mjs && node tools/gen-pipes.mjs",
+    "test": "npm run gen && vitest run && python \"../../Projects/hackathon-usage-verifier/eval/test_stage1.py\"",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run gen && tsc --noEmit && vitest run && python \"../../Projects/hackathon-usage-verifier/eval/test_stage1.py\" && rsbuild build",
+    "stage2": "node tools/stage2-publish.mjs",
+    "sql-probe": "node tools/sql-probe.mjs"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "rocketride": "file:../../.rocketride/client/rocketride.tgz",
+    "shell": "file:../../.rocketride/shell/shell.tgz",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@module-federation/rsbuild-plugin": "2.5.1",
+    "@rsbuild/core": "~2.0.11",
+    "@rsbuild/plugin-react": "~2.0.1",
+    "@types/node": "^20.19.41",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "react-refresh": "^0.14.2",
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.11"
+  }
+}

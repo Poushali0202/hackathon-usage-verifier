@@ -1,0 +1,125 @@
+{
+  "components": [
+    {
+      "id": "chat_1",
+      "provider": "chat",
+      "name": "SQL Source",
+      "config": {
+        "hideForm": true,
+        "mode": "Source",
+        "parameters": {},
+        "type": "chat"
+      }
+    },
+    {
+      "id": "agent_1",
+      "provider": "agent_rocketride",
+      "name": "SQL Tool Host",
+      "config": {
+        "instructions": [
+          "You are only here so the SQL node can be invoked as a tool. Do not answer the user. Do not call any tool. Do not invent SQL or JSON. If you receive a chat message, reply with exactly: WAITING_FOR_TOOL"
+        ],
+        "max_waves": 1,
+        "parameters": {}
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "chat_1"
+        }
+      ]
+    },
+    {
+      "id": "llm_1",
+      "provider": "llm_anthropic",
+      "name": "Anthropic",
+      "config": {
+        "profile": "claude-haiku-4-5",
+        "claude-haiku-4-5": {
+          "apikey": "${ROCKETRIDE_ANTHROPIC_KEY}"
+        },
+        "parameters": {}
+      },
+      "control": [
+        {
+          "classType": "llm",
+          "from": "agent_1"
+        },
+        {
+          "classType": "llm",
+          "from": "sql_1"
+        }
+      ]
+    },
+    {
+      "id": "memory_1",
+      "provider": "memory_internal",
+      "name": "Execution Memory",
+      "config": {
+        "type": "memory_internal"
+      },
+      "control": [
+        {
+          "classType": "memory",
+          "from": "agent_1"
+        }
+      ]
+    },
+    {
+      "id": "sql_1",
+      "provider": "db_postgres",
+      "name": "Judge Hack SQL",
+      "config": {
+        "profile": "default",
+        "default": {
+          "allow_execute": true,
+          "host": "${ROCKETRIDE_HACKJUDGE_PG_HOST}",
+          "user": "${ROCKETRIDE_HACKJUDGE_PG_USER}",
+          "password": "${ROCKETRIDE_HACKJUDGE_PG_PASSWORD}",
+          "database": "${ROCKETRIDE_HACKJUDGE_PG_DATABASE}",
+          "table": "hj_runs",
+          "db_description": "Judge Hack runs and custom targets. Deterministic app SQL via execute; the LLM does not invent schema or rows.",
+          "max_attempts": 1
+        },
+        "parameters": {}
+      },
+      "input": [
+        {
+          "lane": "questions",
+          "from": "chat_1"
+        }
+      ],
+      "control": [
+        {
+          "classType": "tool",
+          "from": "agent_1"
+        }
+      ]
+    },
+    {
+      "id": "response_1",
+      "provider": "response_answers",
+      "name": "Return SQL",
+      "config": {
+        "laneName": "answers"
+      },
+      "input": [
+        {
+          "lane": "answers",
+          "from": "agent_1"
+        }
+      ]
+    }
+  ],
+  "name": "Judge Hack SQL V1 (external)",
+  "description": "Transitional db_postgres fallback. Same node id sql_1. Do not deploy unless the rocketride_sql broker probe fails.",
+  "source": "chat_1",
+  "isLocked": false,
+  "project_id": "f64aef6d-1acc-4f9f-bac7-3607b1a7be02",
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "version": 1
+}
