@@ -110,6 +110,25 @@ def run_detectors() -> int:
     ck("_HOSTED_ENV matches a webhook-URL env, not a bare API key",
        bool(engine._HOSTED_ENV.search("ROCKETRIDE_WEBHOOK_URL")) and not engine._HOSTED_ENV.search("ROCKETRIDE_API_KEY"))
 
+    # monorepo manifests: workspace package.json must be scanned before an arbitrary [:8] cap
+    tree = ["package.json", "apps/ui/package.json", "packages/meta/package.json",
+            "packages/orchestrate/package.json", "packages/graph/package.json"]
+    ranked = engine._manifest_paths(tree)
+    ck("_manifest_paths prioritizes root then workspace packages",
+       ranked[0] == "package.json" and "packages/orchestrate/package.json" in ranked)
+
+    # inline pipeline: client.use({ pipeline }) without a committed .pipe file
+    inline_src = [{"path": "packages/orchestrate/src/rocketride/client.ts",
+                   "text": "const uri = 'https://api.rocketride.ai';\n"
+                           "export const SOURCE_PROVIDER = 'webhook';\n"
+                           "export function compileToRocketRide() { return { components: [] }; }\n"
+                           "await client.use({ pipeline, name, ttl: 120 });\n"},
+                  {"path": "packages/orchestrate/package.json",
+                   "text": '{"dependencies":{"rocketride":"^1.3.0"}}'}]
+    m_inline = engine._infer_inline_pipeline_metrics(inline_src)
+    ck("_infer_inline_pipeline_metrics finds webhook stages for runtime compile",
+       m_inline["nodes"] >= 5 and "webhook" in m_inline["providers"])
+
     # commit-freshness: the ±grace-day window, and in-window commits are NOT penalised
     w = engine.event_window("2026-08-04")
     ck("event_window = event ±2 days", w and w["start"] == "2026-08-02" and w["end"] == "2026-08-06")
