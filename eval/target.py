@@ -39,6 +39,100 @@ GENERIC_WEIGHTS = {
 }
 GENERIC_THRESHOLDS = {"significant": 4.0, "moderate": 2.0, "less": 1.0}
 
+# Product-class architecture: labels + which generic SIGNAL lights each pane.
+# The engine does not grow a new scorer per vendor — a target picks a template
+# (or supplies its own panes). RocketRide pipeline scoring stays on the preset.
+ARCHITECTURE_TEMPLATES: dict[str, list[dict]] = {
+    "sdk": [
+        {"id": "install", "label": "Package installed", "signal": "dependency", "load_bearing": False},
+        {"id": "wired", "label": "Configured / keys", "signal": "hosted", "load_bearing": False},
+        {"id": "client", "label": "Called in code", "signal": "invocation", "load_bearing": True},
+        {"id": "runtime", "label": "Runtime API", "signal": "api_usage", "load_bearing": True},
+        {"id": "hosted", "label": "Shipped / hosted", "signal": "platform_deploy", "load_bearing": False},
+    ],
+    "data_platform": [
+        {"id": "install", "label": "Package installed", "signal": "dependency", "load_bearing": False},
+        {"id": "config", "label": "Platform config", "signal": "artifact", "load_bearing": False},
+        {"id": "client", "label": "Client / SDK", "signal": "invocation", "load_bearing": True},
+        {"id": "data", "label": "Data plane / API", "signal": "api_usage", "load_bearing": True},
+        {"id": "hosted", "label": "Hosted on platform", "signal": "platform_deploy", "load_bearing": True},
+    ],
+    "api": [
+        {"id": "install", "label": "Package / client", "signal": "dependency", "load_bearing": False},
+        {"id": "auth", "label": "Auth / keys", "signal": "hosted", "load_bearing": False},
+        {"id": "client", "label": "Called in code", "signal": "invocation", "load_bearing": False},
+        {"id": "runtime", "label": "Runtime API", "signal": "api_usage", "load_bearing": True},
+        {"id": "hosted", "label": "Live endpoint", "signal": "platform_deploy", "load_bearing": True},
+    ],
+    "deploy": [
+        {"id": "install", "label": "Package / project", "signal": "dependency", "load_bearing": False},
+        {"id": "config", "label": "Deploy config", "signal": "artifact", "load_bearing": False},
+        {"id": "account", "label": "Account / env", "signal": "hosted", "load_bearing": False},
+        {"id": "runtime", "label": "Preview / API", "signal": "api_usage", "load_bearing": False},
+        {"id": "hosted", "label": "Live on platform", "signal": "platform_deploy", "load_bearing": True},
+    ],
+}
+
+
+def infer_architecture_template(types: list | None, explicit: str | None = None) -> str:
+    if explicit and explicit in ARCHITECTURE_TEMPLATES:
+        return explicit
+    tset = {str(x).lower() for x in (types or ["code"])}
+    if "platform" in tset and ("code" in tset or "api" in tset):
+        return "data_platform"
+    if "platform" in tset:
+        return "deploy"
+    if "api" in tset and "code" not in tset:
+        return "api"
+    return "sdk"
+
+
+def _signal_on(signal: str, evidence: dict) -> bool:
+    sdk = evidence.get("sdk") or {}
+    pf = evidence.get("platform") or {}
+    if signal == "dependency":
+        return bool(evidence.get("dependency"))
+    if signal == "invocation":
+        return int(sdk.get("callsites") or 0) > 0
+    if signal == "invocation_deep":
+        return int(sdk.get("callsites") or 0) >= 8
+    if signal == "api_usage":
+        return bool(sdk.get("engine"))
+    if signal == "hosted":
+        return bool(sdk.get("hosted"))
+    if signal == "file_spread":
+        return int(sdk.get("file_spread") or 0) >= 2
+    if signal == "artifact":
+        return bool(pf.get("files"))
+    if signal == "platform_deploy":
+        return bool(pf.get("domains"))
+    return False
+
+
+def architecture_view(target: "Target", evidence: dict) -> list[dict]:
+    """Map this target's architecture panes onto signals we already detected.
+
+    Panes are a VIEW of generic evidence, never a second scoring path. A streaming
+    SDK, a BaaS, and an HTTP API all use the same signals with different labels.
+    """
+    custom = [p for p in (target.architecture or []) if isinstance(p, dict) and p.get("id")]
+    if custom:
+        spec = custom[:5]
+    else:
+        slug = infer_architecture_template(target.types, target.architecture_template)
+        spec = ARCHITECTURE_TEMPLATES[slug]
+    out = []
+    for pane in spec[:5]:
+        signal = str(pane.get("signal") or "")
+        out.append({
+            "id": str(pane.get("id") or signal or "pane"),
+            "label": str(pane.get("label") or signal or "Capability"),
+            "signal": signal,
+            "load_bearing": bool(pane.get("load_bearing")),
+            "state": "target" if _signal_on(signal, evidence) else "none",
+        })
+    return out
+
 
 def _split_tokens(text: str | None) -> list[str]:
     """Free-text field -> clean literal tokens. Splits on commas and pipes, strips
@@ -106,6 +200,8 @@ class Target:
     scaffold_paths: tuple = ()
     weights: dict = field(default_factory=dict)
     thresholds: dict = field(default_factory=dict)
+    architecture_template: str = ""
+    architecture: list = field(default_factory=list)
 
     # ---- construction ----
     @classmethod
@@ -134,6 +230,8 @@ class Target:
             scaffold_paths=tuple(cfg.get("scaffold_paths", [])),
             weights=dict(cfg.get("weights", {})),
             thresholds=dict(cfg.get("thresholds", {})),
+            architecture_template=str(cfg.get("architecture_template") or ""),
+            architecture=list(cfg.get("architecture") or []),
         )
 
     @classmethod
@@ -172,6 +270,8 @@ class Target:
             neutral=frozenset(t.lower() for t in _split_tokens(cfg.get("neutral"))),
             weights=_num_map(cfg.get("weights"), GENERIC_WEIGHTS),
             thresholds=_num_map(cfg.get("thresholds"), GENERIC_THRESHOLDS),
+            architecture_template=str(cfg.get("architecture_template") or ""),
+            architecture=list(cfg.get("architecture") or []),
         )
 
 

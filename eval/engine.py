@@ -14,7 +14,7 @@ import json
 import re
 from urllib.parse import quote
 
-from target import Target, load_preset  # noqa: F401  (eval/ dir is on sys.path wherever engine is imported)
+from target import Target, architecture_view, load_preset  # noqa: F401  (eval/ dir is on sys.path wherever engine is imported)
 
 # The bundled preset (eval/targets/rocketride.json) mirrors the constants below verbatim -
 # it is the DB-seeded description of what this module's legacy path checks. The legacy
@@ -63,6 +63,9 @@ _HOSTED_ENV = re.compile(r"rocketride_\w*(url|webhook|endpoint|hook)", re.I)
 _PIPE_HINT = re.compile(r"^(webhook|chat|prompt|response|source|memory|telegram)$|^(llm_|agent_|tool_|db_|embedding_|vector|response_|source_)", re.I)
 _JSON_PIPE_PATH = re.compile(r"pipeline|rocketride", re.I)
 _JSON_CONFIG = re.compile(r"(package(-lock)?|tsconfig|composer|schema|manifest|settings|config)\.json$|node_modules", re.I)
+_MANIFEST_CAP = 24   # monorepos can have many package.json files; root-only caps miss workspace deps
+_RR_IMPORT = re.compile(r"""(?:from|import)\s+['"]?rocketride|import\s*\(\s*['"]rocketride['"]""", re.I)
+_INLINE_PIPE_PATH = "<in-code pipeline>"
 
 
 # ---------------------------------------------------------------- pure detectors
@@ -194,6 +197,45 @@ def _first_site(source_files: list, rx, snippet: str) -> dict | None:
     return None
 
 
+def _manifest_paths(paths: list, cap: int = _MANIFEST_CAP) -> list:
+    """Manifest blobs in fetch-priority order — root first, then workspace packages (monorepos)."""
+    mfs = [p for p in paths if _MANIFEST.search(p)]
+
+    def rank(p: str) -> tuple:
+        pl = p.lower()
+        segs = p.split("/")
+        is_root = len(segs) == 1
+        has_rr = "rocketride" in pl
+        in_workspace = any(s in ("packages", "apps", "libs", "crates") for s in segs[:-1])
+        return (0 if is_root else 1, 0 if has_rr else 1, 0 if in_workspace else 1, len(segs), pl)
+
+    return sorted(mfs, key=rank)[:cap]
+
+
+def _infer_inline_pipeline_metrics(source_files: list) -> dict:
+    """Best-effort node metrics when the only pipeline is compiled/hand-built in code."""
+    joined = "\n".join(f["text"] for f in source_files)
+    providers: list[str] = []
+    for m in re.finditer(r"""provider\s*[:=]\s*['"]([^'"]+)['"]""", joined, re.I):
+        providers.append(m.group(1))
+    for m in re.finditer(r"""['"](agent_[^'"]+|llm_[^'"]+|tool_[^'"]+)['"]""", joined):
+        providers.append(m.group(1))
+    for const in ("webhook", "response_text", "response_answers", "chat", "prompt", "ner"):
+        if re.search(rf"['\"]{const}['\"]", joined, re.I):
+            providers.append(const)
+    providers = list(dict.fromkeys(p for p in providers if p))
+    nodes = len(providers)
+    if nodes < 4 and ("compileToRocketRide" in joined or _INLINE_PIPE.search(joined)):
+        nodes = max(nodes, 5)
+    if nodes == 0:
+        nodes = 5
+    has_agent = any(str(p).startswith("agent_") for p in providers)
+    has_llm = any(str(p).startswith("llm_") for p in providers)
+    return {"nodes": nodes, "providers": providers[:20], "has_agent": has_agent,
+            "has_llm": has_llm, "tool_count": sum(1 for p in providers if str(p).startswith("tool_")),
+            "project_id": ""}
+
+
 def _call_sites(f: dict, base: str) -> list:
     out = []
     for i, line in enumerate(f["text"].splitlines(), 1):
@@ -233,7 +275,7 @@ def sdk_metrics(source_files: list) -> dict:
         t, low = f["text"], f["text"].lower()
         n = len(_SDK_CALL.findall(t))
         callsites += n
-        if n or "from rocketride" in low or "import rocketride" in low or "@rocketride" in low:
+        if n or _RR_IMPORT.search(low) or "@rocketride" in low:
             files_using += 1
         # hosted-pipeline usage = a pipeline called by id / a deployed webhook + an adapter. A bare
         # ROCKETRIDE_API_KEY is only authentication (present even for local-pipe projects like
@@ -285,7 +327,8 @@ def evaluate(evidence: dict, target: Target | None = None) -> dict:
         return _evaluate_generic(evidence, target)
     if not evidence.get("accessible"):
         return {"tag": "None", "backbone": "No", "score": 0.0, "pipelines": [], "sdk": {},
-                "breakdown": [], "pipelines_called": 0, "reason": "inaccessible"}
+                "breakdown": [], "pipelines_called": 0, "reason": "inaccessible",
+                "scoring": "pipeline"}
 
     breakdown, score = [], 0.0
 
@@ -398,6 +441,7 @@ def evaluate(evidence: dict, target: Target | None = None) -> dict:
     return {"tag": tag, "backbone": backbone, "score": score, "pipelines": pipelines, "sdk": sdk,
             "breakdown": breakdown, "pipelines_called": called, "tech": evidence.get("tech", []),
             "pipelines_total": len(pipelines), "other_platforms": evidence.get("other_platforms", []),
+            "scoring": "pipeline",
             "event_window": win,
             "history_penalty": pen if win else None,
             "project_predates": project_predates if win else None,
@@ -552,8 +596,13 @@ def evidence_lines(ev: dict) -> list:
 
 
 def det_note(ev: dict) -> str:
-    note = (f"Deterministic score {ev['score']} -> {ev['tag']} / backbone {ev['backbone']}; "
-            f"{ev['pipelines_called']}/{ev['pipelines_total']} pipeline(s) called.")
+    if ev.get("scoring") == "generic":
+        hits = [b["signal"] for b in (ev.get("breakdown") or []) if (b.get("points") or 0) > 0]
+        note = (f"Deterministic score {ev['score']} -> {ev['tag']} / backbone {ev['backbone']} "
+                f"(SDK & platform signals{(': ' + '; '.join(hits[:4])) if hits else ''}).")
+    else:
+        note = (f"Deterministic score {ev['score']} -> {ev['tag']} / backbone {ev['backbone']}; "
+                f"{ev['pipelines_called']}/{ev['pipelines_total']} pipeline(s) called.")
     pen = ev.get("history_penalty")
     pen_txt = f"−{pen:g}" if pen else "flag only"
     if ev.get("project_predates"):
@@ -598,9 +647,13 @@ def gather(url: str, gh, event_date: str | None = None,
     st, tbody = gh(f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1")
     if st != 200:
         return {"accessible": True, "fetch_incomplete": True, "note": f"tree fetch failed (HTTP {st})"}
+    tree = json.loads(tbody)
+    if tree.get("truncated") is True:
+        return {"accessible": True, "fetch_incomplete": True,
+                "note": "GitHub recursive tree was truncated — no verdict on partial retrieval"}
     # blobs only: directories and submodules 404 on raw fetches, and with the
     # fetch-failure guard a non-file entry would defer the repo permanently
-    paths = [x.get("path", "") for x in json.loads(tbody).get("tree", []) if x.get("type") == "blob"]
+    paths = [x.get("path", "") for x in tree.get("tree", []) if x.get("type") == "blob"]
 
     fetch_fails = [0]
 
@@ -624,7 +677,7 @@ def gather(url: str, gh, event_date: str | None = None,
 
     dependency, others = False, set()
     manifest_texts = []
-    for mf in [p for p in paths if _MANIFEST.search(p)][:8]:
+    for mf in _manifest_paths(paths):
         txt = raw(mf)
         manifest_texts.append(txt)
         if re.search(r"rocketride|@rocketride/sdk", txt, re.I):
@@ -655,6 +708,12 @@ def gather(url: str, gh, event_date: str | None = None,
         if not called and runner_site:
             called, sites = True, [runner_site]
         pe["called"], pe["call_sites"] = called, sites
+
+    # In-code pipeline object (client.use({ pipeline: … })) with no committed RocketRide .pipe —
+    # e.g. Hopper compiles specs at runtime. Score as one called pipeline.
+    if inline_site and not any(pe.get("called") for pe in pipes):
+        pipes.append({"path": _INLINE_PIPE_PATH, "metrics": _infer_inline_pipeline_metrics(source_files),
+                      "called": True, "call_sites": [inline_site], "first_commit": None})
 
     # commit-history freshness (only when an event date was provided - one API call per pipe):
     # earliest commit touching the pipe file, taking the older of author/committer date so a
@@ -716,7 +775,7 @@ def gather(url: str, gh, event_date: str | None = None,
     scaffold = any(p.endswith(".claude/rules/rocketride.md") for p in paths)
     if fetch_fails[0]:
         return {"accessible": True, "fetch_incomplete": True,
-                "note": f"{fetch_fails[0]} file fetch(es) failed - evidence would be partial"}
+                "note": f"{fetch_fails[0]} file fetch(es) failed — no verdict on partial retrieval"}
     return {
         "accessible": True, "file_count": len(paths),
         "tech": detect_tech(paths, manifest_texts, _gh_languages(gh, owner, repo)),
@@ -755,9 +814,13 @@ def _gather_generic(url: str, gh, event_date: str | None,
     st, tbody = gh(f"https://api.github.com/repos/{owner}/{repo}/git/trees/{branch}?recursive=1")
     if st != 200:
         return {"accessible": True, "fetch_incomplete": True, "note": f"tree fetch failed (HTTP {st})"}
+    tree = json.loads(tbody)
+    if tree.get("truncated") is True:
+        return {"accessible": True, "fetch_incomplete": True,
+                "note": "GitHub recursive tree was truncated — no verdict on partial retrieval"}
     # blobs only: directories and submodules 404 on raw fetches, and with the
     # fetch-failure guard a non-file entry would defer the repo permanently
-    paths = [x.get("path", "") for x in json.loads(tbody).get("tree", []) if x.get("type") == "blob"]
+    paths = [x.get("path", "") for x in tree.get("tree", []) if x.get("type") == "blob"]
 
     fetch_fails = [0]
 
@@ -782,7 +845,7 @@ def _gather_generic(url: str, gh, event_date: str | None,
 
     dependency, others = False, set()
     manifest_texts = []
-    for mf in [p for p in paths if _MANIFEST.search(p)][:8]:
+    for mf in _manifest_paths(paths):
         txt = raw(mf)
         manifest_texts.append(txt)
         if t.dependency_rx and t.dependency_rx.search(txt):
@@ -790,14 +853,19 @@ def _gather_generic(url: str, gh, event_date: str | None,
         others.update(o for o in watch if o in txt.lower())
 
     src = [p for p in paths if _SRC_EXT.search(p)]
-    named = [p for p in src if t.name_in_path_rx and t.name_in_path_rx.search(p)]
-    hint = [p for p in src if p not in named and t.src_hint_rx and t.src_hint_rx.search(p)]
-    rest = [p for p in src if p not in named and p not in hint]
+    def _src_rank(p: str) -> tuple:
+        pl = p.lower()
+        named_hit = 1 if (t.name_in_path_rx and t.name_in_path_rx.search(p)) else 0
+        example = 1 if any(seg in pl for seg in ("/examples/", "/example/", "/sdk/", "/foreign/")) else 0
+        return (-named_hit, -example, len(p), p)
+    ordered = sorted(src, key=_src_rank)
     source_files, callsites, files_using = [], 0, 0
     hosted = api_used = False
     domain_hits, marker_hits = set(), set()
-    for cf in (named + hint + rest)[:40]:
+    for cf in ordered[:80]:
         txt = raw(cf)
+        if not txt.strip():
+            continue
         low = txt.lower()
         source_files.append({"path": cf, "text": txt})
         n = len(t.sdk_call_rx.findall(txt)) if t.sdk_call_rx else 0
@@ -854,7 +922,7 @@ def _gather_generic(url: str, gh, event_date: str | None,
 
     if fetch_fails[0]:
         return {"accessible": True, "fetch_incomplete": True,
-                "note": f"{fetch_fails[0]} file fetch(es) failed - evidence would be partial"}
+                "note": f"{fetch_fails[0]} file fetch(es) failed — no verdict on partial retrieval"}
     return {
         "accessible": True, "file_count": len(paths),
         "tech": detect_tech(paths, manifest_texts, _gh_languages(gh, owner, repo)),
@@ -880,7 +948,8 @@ def _evaluate_generic(evidence: dict, t: Target) -> dict:
     Wt, TH = t.weights, t.thresholds
     if not evidence.get("accessible"):
         return {"tag": "None", "backbone": "No", "score": 0.0, "pipelines": [], "sdk": {},
-                "breakdown": [], "pipelines_called": 0, "reason": "inaccessible"}
+                "breakdown": [], "pipelines_called": 0, "reason": "inaccessible",
+                "scoring": "generic"}
 
     breakdown, score = [], 0.0
 
@@ -959,6 +1028,8 @@ def _evaluate_generic(evidence: dict, t: Target) -> dict:
             "other_platforms": evidence.get("other_platforms", []),
             "tech": evidence.get("tech", []),
             "platform": pf, "target_name": t.name,
+            "scoring": "generic",
+            "architecture": architecture_view(t, evidence),
             "event_window": win,
             "history_penalty": pen if win else None,
             "project_predates": project_predates if win else None,

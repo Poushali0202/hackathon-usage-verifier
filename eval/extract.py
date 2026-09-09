@@ -53,6 +53,18 @@ _GENERIC_DOTDIRS = {".github", ".vscode", ".git", ".idea", ".venv", ".env", ".ca
                     ".expo", ".vite", ".pytest_cache", ".tox", ".mypy_cache", ".circleci"}
 
 
+def infer_architecture_template(types) -> str:
+    """Same product-class map as the TypeScript `inferArchitectureTemplate` (types-only)."""
+    tset = {str(x).lower() for x in (types or [])}
+    if "platform" in tset and ("code" in tset or "api" in tset):
+        return "data_platform"
+    if "platform" in tset:
+        return "deploy"
+    if "api" in tset and "code" not in tset:
+        return "api"
+    return "sdk"
+
+
 def _fetch(url: str, gh) -> tuple | None:
     """(owner, repo, paths, raw_fn) for a repo, or None if unreadable."""
     import run_batch as rb
@@ -487,6 +499,7 @@ def finalize(ctx: dict, answer_text: str) -> dict:
         out["types"].append("api")
     if not out["types"]:
         out["types"] = ["code"]
+    out["architecture_template"] = infer_architecture_template(out["types"])
     if not cfg.get("competitors"):
         warnings.append("Competitors cannot be derived from the vendor repo "
                         "(its integrations are not rivals) - add them manually.")
