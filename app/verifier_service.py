@@ -221,7 +221,7 @@ def _eval_summary(ev: dict) -> dict:
 
 async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = None,
                      history_penalty: float | None = None,
-                     target: "engine.Target | None" = None):
+                     target: "engine.Target | None" = None, explain: bool = True):
     """Async generator: yields ('stage', {...}) events then a final ('result', {...}).
 
     Stage A (fetch + measure) runs the DETERMINISTIC engine off the event loop - it gathers the repo
@@ -268,13 +268,19 @@ async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = N
     # DETERMINISTIC verdict (no LLM): tag, backbone, score, and the ground-truth pipeline table
     ev = engine.evaluate(evidence, target)
 
-    yield "stage", {"stage": "classify", "engine": "cloud", "project": project,
-                    "message": "Explaining the verdict on RocketRide Cloud - Pipeline B",
-                    "digest": _eval_summary(ev)}
-    prose = await pool.explain(ev, project, url, row.get("feedback", ""),
-                               readme_head=evidence.get("readme_head", ""),
-                               target_name=tname)
-    explain_failed = bool(prose.get("explain_failed"))
+    if explain:
+        yield "stage", {"stage": "classify", "engine": "cloud", "project": project,
+                        "message": "Explaining the verdict on RocketRide Cloud - Pipeline B",
+                        "digest": _eval_summary(ev)}
+        prose = await pool.explain(ev, project, url, row.get("feedback", ""),
+                                   readme_head=evidence.get("readme_head", ""),
+                                   target_name=tname)
+        explain_failed = bool(prose.get("explain_failed"))
+    else:
+        # agent/API mode: deterministic verdict only, no LLM prose, no LLM cost;
+        # justification falls back to the deterministic note below
+        prose = {}
+        explain_failed = False
 
     # README-stated names beat a repo-slug label / an empty team column (never a sheet-given value)
     if label_from_repo and rb.title_upgrades(repo_name, str(prose.get("project_name") or "")):
@@ -299,7 +305,7 @@ async def verify_row(row: dict, pool: ClassifierPool, event_date: str | None = N
         "tech": ev.get("tech", []),
         "description": prose.get("description", ""),
         "rocketride_usage": prose.get("rocketride_usage", ""),
-        "justification": (prose.get("justification", "") if not explain_failed
+        "justification": ((prose.get("justification", "") or note) if not explain_failed
                           else f"{note} (Plain-English explanation unavailable this run - the "
                                "deterministic verdict stands; see the evidence table.)"),
         "notes": note + (" [explanation pending - cloud classifier unreachable]" if explain_failed else ""),

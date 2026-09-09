@@ -20,7 +20,7 @@ from io import BytesIO
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Header, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -31,6 +31,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 from .verifier_service import ClassifierPool, verify_row  # noqa: E402
 import run_batch as rb  # noqa: E402  (project root is on sys.path via verifier_service)
+from sqlalchemy import select  # noqa: E402
 from db.models import Result as DbResult, Run as DbRun, Target as DbTarget  # noqa: E402
 from db.session import SessionLocal, init_db  # noqa: E402
 from target import Target as EngineTarget  # noqa: E402  (eval/ on sys.path via verifier_service)
@@ -39,7 +40,7 @@ import engine  # noqa: E402  (target test dry-runs)
 from .node_api import JOBS as NODE_JOBS, create_job as node_create_job  # noqa: E402
 from .node_api import router as node_router  # noqa: E402
 import os  # noqa: E402
-from .authn import Identity, current_identity  # noqa: E402
+from .authn import Identity, current_identity, resolve_identity  # noqa: E402
 from .entitlements import LIMITS, check_rows, clamp_freshness, run_allowance_advisory, tenant_tier  # noqa: E402
 from .db_api import router as db_router  # noqa: E402
 from .runstate import ACTIVE as ACTIVE_RUNS  # noqa: E402
@@ -183,7 +184,8 @@ async def _new_run(ident: Identity, run_name: str | None, total: int,
 async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY,
                       event_date: str | None = None, history_penalty: float | None = None,
                       run_id: str | None = None, target: "EngineTarget | None" = None,
-                      kb_budget: float | None = None, allowance: dict | None = None):
+                      kb_budget: float | None = None, allowance: dict | None = None,
+                      explain: bool = True):
     """Shared NDJSON generator for live + batch. Repos are verified CONCURRENTLY (up to
     `concurrency` at a time); each verify_row's stage/result events are merged into one output
     stream via a queue, so a large batch finishes ~concurrency-times faster than one-at-a-time.
@@ -215,7 +217,7 @@ async def _run_stream(rows: list[dict], concurrency: int = BATCH_CONCURRENCY,
                         "metered billing for the overage once checkout lands."}))
                     return
                 async for kind, payload in verify_row(row, pool, event_date, history_penalty,
-                                                      target):
+                                                      target, explain=explain):
                     if kind == "result":
                         kb_used["v"] += float(payload.get("kb_processed") or 0.0)
                     await q.put((kind, i, payload))
@@ -316,6 +318,113 @@ async def verify_stream(req: VerifyRequest, ident: Identity = Depends(current_id
                                          target=target, kb_budget=LIMITS[tier]["run_kb"],
                                          allowance=run_allowance_advisory(tier, len(rows))),
                              media_type="application/x-ndjson")
+
+
+# ---- agent-facing scan API (Joe's agent) -------------------------------------
+# Simple API-key auth (X-Api-Key) mapped to a dev-mode tenant via the env var
+# HACKJUDGE_SCAN_KEYS ("key=handle,key2=handle2"). Start a scan, poll for results.
+
+def _scan_keys() -> dict:
+    out = {}
+    for pair in (os.getenv("HACKJUDGE_SCAN_KEYS") or "").split(","):
+        if "=" in pair:
+            k, h = pair.split("=", 1)
+            if k.strip() and h.strip():
+                out[k.strip()] = h.strip()
+    return out
+
+
+async def scan_identity(x_api_key: str | None = Header(None)) -> Identity:
+    keys = _scan_keys()
+    if not keys:
+        raise HTTPException(503, "Scan API is not configured (HACKJUDGE_SCAN_KEYS unset).")
+    handle = keys.get((x_api_key or "").strip())
+    if not handle:
+        raise HTTPException(401, "Invalid or missing X-Api-Key.")
+    return await resolve_identity(handle)
+
+
+class ScanRequest(BaseModel):
+    repos: list[str]
+    target: str | None = None          # target name (case-insensitive); default = RocketRide preset
+    event_date: str | None = None      # YYYY-MM-DD enables freshness checks (tier permitting)
+    history_penalty: float | None = None
+    run_name: str | None = None
+    explain: bool = False              # True adds LLM prose; default = deterministic verdicts only
+
+
+async def _drain(gen) -> None:
+    """Drive a run stream to completion server-side (persistence happens inside)."""
+    try:
+        async for _ in gen:
+            pass
+    except Exception as e:  # noqa: BLE001 - background run must never crash the app
+        print(f"[warn] scan run failed: {type(e).__name__}: {e}")
+
+
+async def _scan_target_id(name: str | None, tenant_id: str) -> str | None:
+    if not name:
+        return None
+    async with SessionLocal() as s:
+        rows = (await s.execute(select(DbTarget).where(
+            DbTarget.tenant_id == tenant_id))).scalars().all()
+    for t in rows:
+        if t.name.strip().lower() == name.strip().lower():
+            return t.id
+    if name.strip().lower() == "rocketride":
+        return None                     # preset fallback path
+    raise HTTPException(404, f"No target named '{name}' for this account.")
+
+
+@app.post("/api/scan")
+async def scan_start(req: ScanRequest, ident: Identity = Depends(scan_identity)):
+    urls = [str(u).strip() for u in (req.repos or []) if str(u).strip()]
+    if not urls:
+        raise HTTPException(400, "repos must be a non-empty list of GitHub URLs.")
+    bad = [u for u in urls if "github.com" not in u]
+    if bad:
+        raise HTTPException(400, f"Not GitHub URLs: {bad[:3]}")
+    rows = [{"project": "", "github": u, "feedback": "", "demo": "", "deployed": ""}
+            for u in urls]
+    tier = await tenant_tier(ident.tenant_id)
+    check_rows(tier, len(rows))
+    event_date, history_penalty = clamp_freshness(tier, req.event_date, req.history_penalty)
+    target_id = await _scan_target_id(req.target, ident.tenant_id)
+    rb.fill_project_labels(rows)
+    run_id = await _new_run(ident, req.run_name or f"API scan - {len(rows)} repos",
+                            len(rows), event_date, history_penalty, target_id)
+    target = await _engine_target(target_id, ident.tenant_id)
+    asyncio.create_task(_drain(_run_stream(
+        rows, event_date=event_date, history_penalty=history_penalty, run_id=run_id,
+        target=target, kb_budget=LIMITS[tier]["run_kb"], explain=req.explain)))
+    return {"run_id": run_id, "status": "running", "total": len(rows),
+            "poll": f"/api/scan/{run_id}"}
+
+
+@app.get("/api/scan/{run_id}")
+async def scan_status(run_id: str, ident: Identity = Depends(scan_identity)):
+    async with SessionLocal() as s:
+        run = (await s.execute(select(DbRun).where(
+            DbRun.id == run_id, DbRun.tenant_id == ident.tenant_id))).scalar_one_or_none()
+        if run is None:
+            raise HTTPException(404, "Scan not found.")
+        results = (await s.execute(select(DbResult).where(DbResult.run_id == run_id)
+                                   .order_by(DbResult.created_at))).scalars().all()
+    out = []
+    for r in results:
+        p = r.payload or {}
+        item = {
+            "project": p.get("project"), "github": p.get("github"),
+            "tag": p.get("tag"), "score": p.get("score"), "backbone": p.get("backbone"),
+            "repo_accessible": p.get("repo_accessible"),
+            "flagged": bool(p.get("project_predates") or p.get("history_tampered")),
+            "evidence": p.get("evidence") or [],
+            "justification": p.get("justification") or "",
+            "kb_processed": p.get("kb_processed"), "seconds": p.get("seconds"),
+        }
+        out.append(item)
+    return {"run_id": run.id, "status": run.status, "total": run.total,
+            "done": len(out), "results": out}
 
 
 @app.post("/api/batch")
