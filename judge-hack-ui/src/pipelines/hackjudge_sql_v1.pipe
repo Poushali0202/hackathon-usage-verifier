@@ -111,7 +111,7 @@
   "description": "Staging-managed SQL for runs and custom targets. allow_execute is on so the app issues literal statements; the LLM never writes rows.",
   "source": "chat_1",
   "isLocked": false,
-  "project_id": "d1cd587f-24b3-4f21-a7f0-22650844b8eb",
+  "project_id": "8e2a6c14-b7f1-4d93-9a50-1c4e8f2d7b36",
   "viewport": {
     "x": 0,
     "y": 0,

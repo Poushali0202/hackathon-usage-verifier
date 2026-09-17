@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { paneTone } from '../src/components/Tower';
 import {
 	ARCHITECTURE_TEMPLATES,
 	inferArchitectureTemplate,
@@ -6,6 +7,15 @@ import {
 	scoringConfigForPlan,
 	withoutUserRubric,
 } from '../src/verify/architecture';
+
+describe('paneTone', () => {
+	it('paints load-bearing target plates green on first render', () => {
+		expect(paneTone('target', true)).toBe('core');
+		expect(paneTone('target', false)).toBe('rr');
+		expect(paneTone('none', true)).toBe('off');
+		expect(paneTone('other', true)).toBe('off');
+	});
+});
 
 describe('inferArchitectureTemplate', () => {
 	it('honors an explicit template id', () => {

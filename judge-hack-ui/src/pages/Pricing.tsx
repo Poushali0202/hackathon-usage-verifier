@@ -94,9 +94,11 @@ export default function Pricing() {
 					))}
 				</div>
 				<p className="muted" style={{ fontSize: 12, margin: '14px 0 0' }}>
-					Behind the scenes: each run reserves its maximum possible cost before it starts
-					and settles the actual cost when it finishes, so a balance can never go negative.
-					Plans go live when a version is approved on the Store tab.
+					Each run is refused once the included allowance is empty, and a sheet that would
+					overshoot is truncated to what still fits. Stripe auto-recharge is not wired yet —
+					plans go live when a version is approved on the Store tab. Do not invent price IDs.
+					Daytona compute is included; Developer uses 2 sandboxes, Company/Organizers 3,
+					shared across the workspace up to 5 live boxes.
 				</p>
 			</div>
 		</Page>

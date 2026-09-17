@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { usePrefs } from 'shell';
-import { Page, AllowanceWarning } from '../components/bits';
+import { Page, AllowanceModal, OrgBusyModal } from '../components/bits';
 import ResultsGrid from '../components/ResultsGrid';
 import { isCompanyPlan } from '../billing';
 import { estimateAllowance, targetRubricHelp } from '../format';
 import { useNav } from '../NavContext';
 import { resolveTargetId, useRuns } from '../RunsContext';
 import { urlsFromText } from '../verify/sheet';
+import { isOrgBusyReason } from '../verify/leases';
 
 export default function QuickVerify() {
 	const { settings, startBatch, runs, targets } = useRuns();
@@ -18,6 +19,8 @@ export default function QuickVerify() {
 	const [targetId, setTargetId] = useState(() => resolveTargetId(targets, String(getPref('hj.targetId') || '')));
 	const [error, setError] = useState('');
 	const [activeId, setActiveId] = useState<string | null>(null);
+	const [capOpen, setCapOpen] = useState(false);
+	const [orgBusyOpen, setOrgBusyOpen] = useState(false);
 
 	useEffect(() => {
 		setTargetId((cur) => resolveTargetId(targets, cur || String(getPref('hj.targetId') || '')));
@@ -25,10 +28,23 @@ export default function QuickVerify() {
 
 	const repos = urlsFromText(urls);
 	const run = runs.find((r) => r.id === activeId);
-	const valid = repos.length > 0 && !!eventDate && run?.status !== 'running';
+	const allowance = estimateAllowance(repos.length, settings.plan, settings.meter_kb_used);
+	const capKey = allowance
+		? `${allowance.blocked ? 'block' : 'trunc'}:${repos.length}:${allowance.est_verified_rows}:${settings.meter_kb_used}`
+		: '';
+	const valid = repos.length > 0 && !!eventDate && run?.status !== 'running' && !allowance?.blocked;
 	const isCompany = isCompanyPlan(settings.plan);
 
-	function verify() {
+	useEffect(() => {
+		if (!capKey || run?.status === 'running') return;
+		setCapOpen(true);
+	}, [capKey, run?.status]);
+
+	useEffect(() => {
+		if (run?.status === 'error' && isOrgBusyReason(run.error)) setOrgBusyOpen(true);
+	}, [run?.status, run?.error]);
+
+	function actuallyVerify() {
 		setError('');
 		const repoName = repos[0].split('/').slice(-1)[0] || 'repo';
 		const runName = repos.length === 1 ? `Quick verify — ${repoName}` : `Quick verify — ${repos.length} repos`;
@@ -44,6 +60,14 @@ export default function QuickVerify() {
 		} catch (e) {
 			setError(e instanceof Error ? e.message : String(e));
 		}
+	}
+
+	function verify() {
+		if (allowance) {
+			setCapOpen(true);
+			return;
+		}
+		actuallyVerify();
 	}
 
 	return (
@@ -83,6 +107,7 @@ export default function QuickVerify() {
 				<div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
 					<button className="btn" type="button" disabled={!valid} onClick={verify}>
 						{run?.status === 'running' ? 'Verifying…'
+							: allowance?.blocked ? 'Allowance empty'
 							: repos.length > 1 ? `Verify ${repos.length} repositories` : 'Verify repository'}
 					</button>
 					{run?.status === 'running' && (
@@ -94,7 +119,6 @@ export default function QuickVerify() {
 			{run?.status === 'error' && <div className="dqline" style={{ marginTop: 16 }}>Verification failed: {run.error}</div>}
 			{!!run?.results?.length && (
 				<div style={{ marginTop: 18 }}>
-					<AllowanceWarning a={estimateAllowance(run.total || repos.length, settings.plan)} />
 					<ResultsGrid results={run.results} total={run.total} summary={run.summary}
 						exportName="quick-verify.xlsx" />
 					<p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
@@ -102,6 +126,13 @@ export default function QuickVerify() {
 					</p>
 				</div>
 			)}
+			<AllowanceModal
+				open={capOpen && run?.status !== 'running'}
+				a={allowance}
+				onClose={() => setCapOpen(false)}
+				onContinue={eventDate ? actuallyVerify : undefined}
+			/>
+			<OrgBusyModal open={orgBusyOpen} onClose={() => setOrgBusyOpen(false)} />
 		</Page>
 	);
 }

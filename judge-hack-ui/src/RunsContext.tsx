@@ -13,6 +13,22 @@ import type { JudgeSettings, StoredRun, StoreStatus, Submission, TargetRecord, V
 import { scoringConfigForPlan } from './verify/architecture';
 import { runRepos } from './verify/session';
 import { classifySqlError, openSqlStore, shouldImportAppState, type SqlClient, type SqlStore, type StoreVariant } from './verify/sqlStore';
+import { consumedKbFromRuns, gateBatch, resultMetersKb } from './verify/meter';
+import { createOrgLease, type OrgLease } from './verify/leases';
+import {
+	filterOwned,
+	mergeRuns,
+	mergeTargets,
+	readTenantMeterKb,
+	readTenantRuns,
+	readTenantTargets,
+	resultTotal,
+	runFingerprint,
+	settleOrphanedRuns,
+	shouldRepairRun,
+	stampOwner,
+	writeTenantState,
+} from './verify/sqlSchema';
 
 const MAX_RUNS = 40;
 export const ROCKETRIDE_PRESET: TargetRecord = {
@@ -46,19 +62,18 @@ type RunsApi = {
 	deleteTarget: (id: string) => void;
 	startBatch: (opts: StartOpts) => string;
 	stop: () => void;
+	hydrateResults: (id: string) => void;
+	makeOrgLease: (kind: string) => OrgLease;
 };
 
 const Ctx = createContext<RunsApi | null>(null);
 
-function asRuns(appState: Record<string, unknown>): StoredRun[] {
-	const raw = appState.runs;
-	return Array.isArray(raw) ? (raw as StoredRun[]) : [];
+function asRuns(appState: Record<string, unknown>, userId?: string): StoredRun[] {
+	return readTenantRuns(appState, userId);
 }
 
-function asTargets(appState: Record<string, unknown>): TargetRecord[] {
-	const raw = appState.targets;
-	const custom = Array.isArray(raw) ? (raw as TargetRecord[]).filter((t) => t && t.id && !t.is_preset) : [];
-	return [ROCKETRIDE_PRESET, ...custom];
+function asTargets(appState: Record<string, unknown>, userId?: string): TargetRecord[] {
+	return withPreset(readTenantTargets(appState, userId));
 }
 
 function asNumber(value: unknown, fallback: number): number {
@@ -73,6 +88,7 @@ function withPreset(custom: TargetRecord[]): TargetRecord[] {
 export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 	const user = useAuthUser();
 	const actor = actorFrom(user);
+	const ownerUserId = actor?.userId;
 	const { appState, updateAppState, settings: wsSettings, updateSetting } = useWorkspace();
 	const { getPref, setPref } = usePrefs();
 	const { client, isConnected } = useShellConnection();
@@ -82,9 +98,20 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 	const sqlRef = useRef<SqlStore | null>(null);
 	const runsRef = useRef<StoredRun[]>([]);
 	const targetsRef = useRef<TargetRecord[]>([]);
+	const upsertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const pendingUpsertRef = useRef<StoredRun | null>(null);
+	const appStateRef = useRef(appState);
+	const hydratingRef = useRef<Set<string>>(new Set());
+	const meterRef = useRef<number | undefined>(undefined);
+	appStateRef.current = appState;
 
-	const [runs, setRuns] = useState<StoredRun[]>(() => asRuns(appState));
-	const [targets, setTargets] = useState<TargetRecord[]>(() => asTargets(appState));
+	const [runs, setRuns] = useState<StoredRun[]>(() => asRuns(appState, ownerUserId));
+	const [targets, setTargets] = useState<TargetRecord[]>(() => asTargets(appState, ownerUserId));
+	const [meterKb, setMeterKb] = useState(() => Math.max(
+		readTenantMeterKb(appState, ownerUserId),
+		consumedKbFromRuns(asRuns(appState, ownerUserId)),
+	));
+	if (meterRef.current == null) meterRef.current = meterKb;
 	const [store, setStore] = useState<StoreStatus>({ kind: 'appState', ready: false });
 	runsRef.current = runs;
 	targetsRef.current = targets;
@@ -100,15 +127,21 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 		history_penalty: asNumber(wsSettings[SETTING_HISTORY_PENALTY] ?? getPref('hj.history_penalty'), 2),
 		plan,
 		billingStatus,
+		meter_kb_used: meterKb,
 	};
 
 	const persistAppState = useCallback((nextRuns: StoredRun[], nextTargets: TargetRecord[]) => {
-		updateAppState((prev) => ({
-			...prev,
-			runs: nextRuns.slice(0, MAX_RUNS),
-			targets: nextTargets.filter((t) => !t.is_preset && t.id !== ROCKETRIDE_PRESET.id),
-		}));
-	}, [updateAppState]);
+		if (!ownerUserId) return;
+		updateAppState((prev) => writeTenantState(
+			prev,
+			ownerUserId,
+			mergeRuns(asRuns(prev, ownerUserId), nextRuns).slice(0, MAX_RUNS),
+			nextTargets.filter((t) => !t.is_preset && t.id !== ROCKETRIDE_PRESET.id),
+			meterRef.current ?? 0,
+		));
+	}, [ownerUserId, updateAppState]);
+	const persistAppStateRef = useRef(persistAppState);
+	persistAppStateRef.current = persistAppState;
 
 	const saveSettings = (next: Partial<JudgeSettings>) => {
 		if (next.grace_days != null) {
@@ -122,39 +155,96 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 		if (next.plan) setPref('hj.plan', next.plan);
 	};
 
+	const flushSqlUpsert = useCallback((run?: StoredRun) => {
+		const next = run || pendingUpsertRef.current;
+		pendingUpsertRef.current = null;
+		if (upsertTimerRef.current) {
+			clearTimeout(upsertTimerRef.current);
+			upsertTimerRef.current = null;
+		}
+		if (!next || !sqlRef.current) return;
+		void sqlRef.current.upsertRun(next).catch((err) => {
+			setStore((prev) => ({
+				...prev,
+				error: err instanceof Error ? err.message : String(err),
+			}));
+		});
+	}, []);
+
+	const scheduleSqlUpsert = useCallback((run: StoredRun) => {
+		pendingUpsertRef.current = run;
+		if (run.status !== 'running') {
+			flushSqlUpsert(run);
+			return;
+		}
+		if (upsertTimerRef.current) return;
+		upsertTimerRef.current = setTimeout(() => flushSqlUpsert(), 2000);
+	}, [flushSqlUpsert]);
+
 	const writeRun = useCallback((run: StoredRun) => {
-		const stamped: StoredRun = {
+		const stamped: StoredRun = stampOwner({
 			...run,
 			updated_by: actor || run.updated_by,
 			updated_at: new Date().toISOString(),
-		};
+		}, ownerUserId);
 		liveRef.current = stamped;
 		setRuns((prev) => {
-			const next = [stamped, ...prev.filter((r) => r.id !== stamped.id)].slice(0, MAX_RUNS);
+			const next = mergeRuns(prev, [stamped]).slice(0, MAX_RUNS);
 			persistAppState(next, targetsRef.current);
 			return next;
 		});
-		if (sqlRef.current) void sqlRef.current.upsertRun(stamped);
-	}, [actor, persistAppState]);
+		scheduleSqlUpsert(stamped);
+	}, [actor, ownerUserId, persistAppState, scheduleSqlUpsert]);
+
+	const hydrateResults = useCallback((id: string) => {
+		const opened = sqlRef.current;
+		if (!opened) return;
+		const current = (liveRef.current?.id === id ? liveRef.current : undefined)
+			|| runsRef.current.find((r) => r.id === id);
+		if (!current || current.results.length || hydratingRef.current.has(id)) return;
+		hydratingRef.current.add(id);
+		void (async () => {
+			try {
+				const results = await opened.loadResults(id);
+				if (!results.length) return;
+				const filled: StoredRun = {
+					...current,
+					results,
+					...countsFromResults(results),
+					summary: current.summary || summarize(results),
+				};
+				setRuns((prev) => {
+					const list = mergeRuns(prev, [filled]).slice(0, MAX_RUNS);
+					persistAppStateRef.current(list, targetsRef.current);
+					return list;
+				});
+				void opened.upsertRun(filled).catch(() => { /* grid already filled */ });
+			} catch {
+				/* keep the shell visible */
+			} finally {
+				hydratingRef.current.delete(id);
+			}
+		})();
+	}, []);
 
 	const saveTarget = useCallback((target: TargetRecord) => {
 		if (target.is_preset || target.id === ROCKETRIDE_PRESET.id) return;
 		const now = new Date().toISOString();
 		const existing = targetsRef.current.find((t) => t.id === target.id);
-		const stamped: TargetRecord = {
+		const stamped: TargetRecord = stampOwner({
 			...target,
 			config: scoringConfigForPlan(target.config || {}, plan),
 			created_by: existing?.created_by || actor,
 			updated_by: actor || target.updated_by,
 			updated_at: now,
-		};
+		}, ownerUserId);
 		setTargets((prev) => {
 			const next = withPreset([...prev.filter((t) => !t.is_preset && t.id !== stamped.id), stamped]);
 			persistAppState(runsRef.current, next);
 			return next;
 		});
 		if (sqlRef.current) void sqlRef.current.upsertTarget(stamped);
-	}, [actor, persistAppState, plan]);
+	}, [actor, ownerUserId, persistAppState, plan]);
 
 	const deleteTarget = useCallback((id: string) => {
 		if (id === ROCKETRIDE_PRESET.id) return;
@@ -167,19 +257,37 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 	}, [persistAppState]);
 
 	useEffect(() => {
-		if (!client || !isConnected) return;
+		const nextRuns = asRuns(appStateRef.current, ownerUserId);
+		setRuns(nextRuns);
+		setTargets(asTargets(appStateRef.current, ownerUserId));
+		const nextMeter = Math.max(
+			readTenantMeterKb(appStateRef.current, ownerUserId),
+			consumedKbFromRuns(nextRuns),
+		);
+		meterRef.current = nextMeter;
+		setMeterKb(nextMeter);
+		liveRef.current = null;
+		if (!ownerUserId) setStore({ kind: 'appState', ready: true });
+	}, [ownerUserId]);
+
+	useEffect(() => {
+		if (!ownerUserId || !client || !isConnected) return;
 		let cancelled = false;
 		void (async () => {
 			try {
-				const opened = await openSqlStore(client as SqlClient, storeVariant);
+				const opened = await openSqlStore(client as SqlClient, storeVariant, ownerUserId);
 				if (cancelled) {
 					await opened.close();
 					return;
 				}
 				await opened.ensureSchema();
 				const remote = await opened.loadAll();
-				const localRuns = runsRef.current;
-				const localTargets = targetsRef.current.filter((t) => !t.is_preset);
+				const localRuns = mergeRuns(asRuns(appStateRef.current, ownerUserId), runsRef.current)
+					.map((run) => stampOwner(run, ownerUserId));
+				const localTargets = mergeTargets(
+					asTargets(appStateRef.current, ownerUserId).filter((t) => !t.is_preset),
+					targetsRef.current.filter((t) => !t.is_preset),
+				).map((target) => stampOwner(target, ownerUserId));
 				let imported = 0;
 				if (shouldImportAppState(remote.runs.length, remote.targets.length, localRuns.length, localTargets.length)) {
 					await opened.importAppState(localRuns, localTargets);
@@ -193,9 +301,41 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 					return;
 				}
 				sqlRef.current = opened;
-				if (latest.runs.length) setRuns(latest.runs);
-				if (latest.targets.length) setTargets(withPreset(latest.targets));
+				const live = liveRef.current;
+				const showRuns = settleOrphanedRuns(
+					filterOwned(
+						mergeRuns(
+							latest.runs,
+							mergeRuns(
+								asRuns(appStateRef.current, ownerUserId),
+								live ? mergeRuns(runsRef.current, [live]) : runsRef.current,
+							),
+						).map((run) => stampOwner(run, ownerUserId)),
+						ownerUserId,
+					),
+					live?.id,
+				);
+				const showTargets = filterOwned(
+					mergeTargets(latest.targets, mergeTargets(
+						asTargets(appStateRef.current, ownerUserId).filter((t) => !t.is_preset),
+						targetsRef.current.filter((t) => !t.is_preset),
+					)).map((target) => stampOwner(target, ownerUserId)),
+					ownerUserId,
+				);
+				const keptRuns = mergeRuns(showRuns, runsRef.current);
+				setRuns(keptRuns);
+				setTargets(withPreset(showTargets));
+				const previous = Math.max(resultTotal(runsRef.current), resultTotal(asRuns(appStateRef.current, ownerUserId)));
+				if (resultTotal(keptRuns) >= previous) {
+					persistAppStateRef.current(keptRuns, withPreset(showTargets));
+				}
 				setStore({ kind: 'sql', ready: true, imported: imported || undefined });
+				for (const run of keptRuns) {
+					const remoteRow = latest.runs.find((r) => r.id === run.id);
+					if (shouldRepairRun(remoteRow, run)) {
+						void opened.upsertRun(run).catch(() => { /* keep merged rows visible */ });
+					}
+				}
 			} catch (err) {
 				if (cancelled) return;
 				sqlRef.current = null;
@@ -210,11 +350,43 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 		})();
 		return () => {
 			cancelled = true;
+			flushSqlUpsert();
 			const current = sqlRef.current;
 			sqlRef.current = null;
 			if (current) void current.close();
 		};
-	}, [client, isConnected, storeVariant]);
+	}, [client, isConnected, ownerUserId, storeVariant, flushSqlUpsert]);
+
+	useEffect(() => {
+		if (!store.ready) return;
+		const localRuns = asRuns(appState, ownerUserId);
+		const localTargets = asTargets(appState, ownerUserId).filter((t) => !t.is_preset);
+		const storedMeter = readTenantMeterKb(appState, ownerUserId);
+		if (storedMeter > (meterRef.current || 0)) {
+			meterRef.current = storedMeter;
+			setMeterKb(storedMeter);
+		}
+		if (!localRuns.length && !localTargets.length) return;
+		const mergedRuns = mergeRuns(runsRef.current, localRuns);
+		const mergedTargets = mergeTargets(targetsRef.current.filter((t) => !t.is_preset), localTargets);
+		if (runFingerprint(mergedRuns) === runFingerprint(runsRef.current)) return;
+		setRuns(mergedRuns);
+		setTargets(withPreset(mergedTargets));
+		const derived = consumedKbFromRuns(mergedRuns);
+		if (derived > (meterRef.current || 0)) {
+			meterRef.current = derived;
+			setMeterKb(derived);
+		}
+		if (store.kind === 'sql' && sqlRef.current) {
+			const opened = sqlRef.current;
+			for (const run of mergedRuns) {
+				const shown = runsRef.current.find((r) => r.id === run.id);
+				if (shouldRepairRun(shown, run)) {
+					void opened.upsertRun(run).catch(() => { /* keep workspace rows visible */ });
+				}
+			}
+		}
+	}, [appState, ownerUserId, store.kind, store.ready]);
 
 	const getRun = useCallback((id: string) => {
 		if (liveRef.current?.id === id) return liveRef.current;
@@ -223,9 +395,33 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 	const stop = useCallback(() => abortRef.current?.abort(), []);
 
+	const makeOrgLease = useCallback((kind: string): OrgLease => createOrgLease({
+		async acquire(wanted, ttlSeconds) {
+			const opened = sqlRef.current;
+			if (!opened || wanted < 1) {
+				return wanted < 1 ? [] : Array.from({ length: wanted }, (_, i) => -(i + 1));
+			}
+			try {
+				return await opened.claimSandboxLeases(wanted, ttlSeconds, kind);
+			} catch {
+				return Array.from({ length: wanted }, (_, i) => -(i + 1));
+			}
+		},
+		async releaseSlots(slots) {
+			const real = (slots || []).filter((n) => n > 0);
+			if (!real.length || !sqlRef.current) return;
+			try { await sqlRef.current.releaseSandboxLeases(real); } catch { /* already gone */ }
+		},
+	}), []);
+
 	const startBatch = useCallback((opts: StartOpts) => {
 		if (!client || !isConnected) throw new Error('RocketRide is not connected yet.');
 		if (abortRef.current) throw new Error('A verification is already running. Stop it before starting another.');
+		const used = Math.max(meterRef.current || 0, consumedKbFromRuns(runsRef.current));
+		meterRef.current = used;
+		const gate = gateBatch(plan, used, opts.repos.length);
+		if (gate.maxRepos < 1) throw new Error(gate.reason);
+		const repos = opts.repos.slice(0, gate.maxRepos);
 		const target = targets.find((t) => t.id === opts.targetId) || ROCKETRIDE_PRESET;
 		if (target.id) setPref('hj.targetId', target.id);
 		const customTarget = target.is_preset
@@ -244,15 +440,18 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 			target_id: target.id,
 			status: 'running',
 			results: [],
-			total: opts.repos.length,
+			total: repos.length,
 			significant_count: 0,
 			flagged_count: 0,
 			done_count: 0,
 			created_at,
+			owner_user_id: ownerUserId,
 			created_by: actor,
 			updated_by: actor,
 			updated_at: created_at,
-			stage: 'Starting Daytona sandboxes…',
+			stage: gate.truncated
+				? `Starting Daytona sandboxes… (${gate.reason})`
+				: 'Starting Daytona sandboxes…',
 		};
 		writeRun(base);
 		const ctrl = new AbortController();
@@ -261,12 +460,13 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 			try {
 				await runRepos({
 					client,
-					repos: opts.repos,
+					repos,
 					eventDate: opts.eventDate,
 					historyPenalty: opts.historyPenalty,
 					runName: opts.name,
 					customTarget,
 					plan,
+					orgLease: makeOrgLease('verify'),
 					signal: ctrl.signal,
 					onStart: (total) => {
 						const r = liveRef.current;
@@ -285,6 +485,13 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 						const idx = key
 							? r.results.findIndex((row) => (row.github || row.project) === key)
 							: -1;
+						if (idx < 0) {
+							const add = resultMetersKb(result);
+							if (add > 0) {
+								meterRef.current = (meterRef.current || 0) + add;
+								setMeterKb(meterRef.current);
+							}
+						}
 						const results = idx >= 0
 							? r.results.map((row, i) => (i === idx ? result : row))
 							: [...r.results, result];
@@ -318,11 +525,11 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 			}
 		})();
 		return id;
-	}, [actor, client, isConnected, plan, setPref, targets, writeRun]);
+	}, [actor, client, isConnected, makeOrgLease, ownerUserId, plan, setPref, targets, writeRun]);
 
 	const api = useMemo<RunsApi>(() => ({
-		runs, targets, settings, store, saveSettings, getRun, saveTarget, deleteTarget, startBatch, stop,
-	}), [runs, targets, settings.grace_days, settings.history_penalty, settings.plan, settings.billingStatus, store, getRun, saveTarget, deleteTarget, startBatch, stop]);
+		runs, targets, settings, store, saveSettings, getRun, saveTarget, deleteTarget, startBatch, stop, hydrateResults, makeOrgLease,
+	}), [runs, targets, settings.grace_days, settings.history_penalty, settings.plan, settings.billingStatus, settings.meter_kb_used, store, getRun, saveTarget, deleteTarget, startBatch, stop, hydrateResults, makeOrgLease]);
 
 	return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 };

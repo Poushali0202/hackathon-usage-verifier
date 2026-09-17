@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePrefs, useShellConnection } from 'shell';
 import { isCompanyPlan } from '../billing';
-import { Page, TagPill, TierLockModal } from '../components/bits';
+import { Page, TagPill, TierLockModal, OrgBusyModal } from '../components/bits';
 import { ROCKETRIDE_PRESET, useRuns } from '../RunsContext';
 import type { ExtractedTarget, TargetRecord, VerifyResult } from '../types';
 import { extractTarget, testTargetRepo, type VerifyClient } from '../verify/session';
+import { isOrgBusyError } from '../verify/leases';
 import {
 	ARCHITECTURE_TEMPLATES,
 	inferArchitectureTemplate,
@@ -111,7 +112,7 @@ async function readUploads(files: File[]): Promise<Record<string, string>> {
 }
 
 export default function Targets() {
-	const { targets, saveTarget, deleteTarget, settings } = useRuns();
+	const { targets, saveTarget, deleteTarget, settings, makeOrgLease } = useRuns();
 	const { client, isConnected } = useShellConnection();
 	const { setPref } = usePrefs();
 	const canTuneScore = isCompanyPlan(settings.plan);
@@ -129,11 +130,16 @@ export default function Targets() {
 	const [tUrl, setTUrl] = useState('');
 	const [tBusy, setTBusy] = useState(false);
 	const [tRes, setTRes] = useState<(VerifyResult & { error?: string }) | null>(null);
+	const [orgBusyOpen, setOrgBusyOpen] = useState(false);
 	const typedPrefill = useRef(false);
 	const lastAutoUrl = useRef('');
 
 	const sel = draft || targets.find((t) => t.id === selId) || targets[0];
-	const form: Record<string, unknown> = { name: sel?.name || '', types: (sel?.config.types as string[]) || ['code'], ...sel?.config };
+	const form: Record<string, unknown> = {
+		types: (sel?.config.types as string[]) || ['code'],
+		...sel?.config,
+		name: sel?.name || '',
+	};
 	const weights = (form.weights as Weights) || {};
 	const thresholds = (form.thresholds as Thresholds) || {};
 	const readOnly = !!sel?.is_preset && !draft;
@@ -266,7 +272,7 @@ export default function Targets() {
 			return;
 		}
 		const created: TargetRecord = {
-			id: 'laserdata',
+			id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `laserdata-${Date.now()}`,
 			name: 'LaserData',
 			is_preset: false,
 			config: { ...LASERDATA_CONFIG },
@@ -329,7 +335,7 @@ export default function Targets() {
 				docsUrl: xDocs.trim() || undefined,
 				pkg: xPkg.trim() || undefined,
 				uploads,
-			});
+			}, makeOrgLease('prefill'));
 			if (res.status && res.status !== 'complete') {
 				setMsg(res.reason || 'Extract did not return a config.');
 				setXInfo(res);
@@ -339,13 +345,14 @@ export default function Targets() {
 			const types = Array.isArray(c.types) && c.types.length
 				? c.types as string[]
 				: (form.types as string[]);
+			const extractedName = String(c.name || '').trim();
 			const nextArch = inferArchitectureTemplate(types, c.architecture_template || form.architecture_template);
 			const keepCustom = Array.isArray(form.architecture)
 				&& !isStockArchitecture(form.architecture, archId);
 			patch({
 				id: sel.id,
 				is_preset: false,
-				name: sel.name.trim() ? sel.name : String(c.name || sel.name),
+				name: sel.name.trim() || extractedName,
 				config: {
 					...sel.config,
 					types,
@@ -359,7 +366,12 @@ export default function Targets() {
 			setXInfo(res);
 			setMsg('');
 		} catch (e) {
-			setMsg(e instanceof Error ? e.message : String(e));
+			if (isOrgBusyError(e)) {
+				setOrgBusyOpen(true);
+				setMsg('Included compute is busy. Retry in a moment.');
+			} else {
+				setMsg(e instanceof Error ? e.message : String(e));
+			}
 		}
 		setXBusy(false);
 	}
@@ -401,10 +413,15 @@ export default function Targets() {
 			const res = await testTargetRepo(client as VerifyClient, url, {
 				name: current.name || 'Target',
 				config: scoringConfigForPlan({ types: ['code'], ...current.config }, settings.plan),
-			});
+			}, makeOrgLease('test'));
 			setTRes(res);
 		} catch (e) {
-			setTRes({ error: e instanceof Error ? e.message : String(e) });
+			if (isOrgBusyError(e)) {
+				setOrgBusyOpen(true);
+				setTRes({ error: 'Included compute is busy. Retry in a moment.' });
+			} else {
+				setTRes({ error: e instanceof Error ? e.message : String(e) });
+			}
 		}
 		setTBusy(false);
 	}
@@ -786,6 +803,7 @@ export default function Targets() {
 					<b> Company</b> and <b>Organizers</b> can change point values and Significant / Moderate / Less
 					cut-offs per target — for example, a deploy-first sponsor vs an SDK-first library.</p>
 			</TierLockModal>
+			<OrgBusyModal open={orgBusyOpen} onClose={() => setOrgBusyOpen(false)} />
 		</Page>
 	);
 }

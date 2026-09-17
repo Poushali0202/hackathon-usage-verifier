@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Page } from '../components/bits';
 import ResultsGrid from '../components/ResultsGrid';
 import { runDuration } from '../format';
@@ -7,8 +7,13 @@ import { useRuns } from '../RunsContext';
 
 export default function RunDetail() {
 	const { runId, go } = useNav();
-	const { getRun, stop } = useRuns();
+	const { getRun, stop, hydrateResults, store } = useRuns();
 	const run = runId ? getRun(runId) : undefined;
+
+	useEffect(() => {
+		if (!runId || !store.ready) return;
+		if (run && run.total > 0 && !(run.results || []).length) hydrateResults(runId);
+	}, [runId, store.ready, run?.total, run?.results?.length, hydrateResults]);
 
 	if (!run) {
 		return (

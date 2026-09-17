@@ -4,6 +4,7 @@ import astronaut from '../astronaut.svg';
 import { openAccount, openCheckout } from '../billing';
 import { Page, StoreBanner } from '../components/bits';
 import { runDuration } from '../format';
+import { formatDataKb, remainingKb, planBudgetKb } from '../verify/meter';
 import { useNav } from '../NavContext';
 import { useRuns } from '../RunsContext';
 
@@ -34,6 +35,7 @@ export default function Dashboard() {
 						<b>{user.displayName || user.preferredUsername}</b>
 						<div className="muted" style={{ fontSize: 12.5 }}>
 							{user.email} · {planLabel} plan{settings.billingStatus ? ` · ${settings.billingStatus.replace(/_/g, ' ')}` : ''}
+							{' · '}{formatDataKb(remainingKb(settings.plan, settings.meter_kb_used))} of {formatDataKb(planBudgetKb(settings.plan))} left
 						</div>
 					</div>
 					<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

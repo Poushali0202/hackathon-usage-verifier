@@ -10,11 +10,24 @@ Daytona sandbox execution to fetch repository evidence and run the pinned determ
 evaluator. The LLM never writes the tag, backbone, or score. The pipeline fails closed for
 inaccessible or incomplete repositories.
 
+Compute is included with the Judge Hack subscription — users do not bring a Daytona key.
+Developer runs use at most 2 sandboxes (~4 vCPU); Company and Organizers use at most 3
+(~6 vCPU). Sandboxes are terminated when the run ends. The workspace also enforces a
+shared org pool of 5 live sandboxes (Daytona Limits tier 1 / 10 vCPU) in SQL so two
+Store sessions cannot overflow into each other. If the pool is full, Verify shows a
+retry modal instead of opening a sixth box. Daytona CPU retry-to-1 remains as a
+backstop.
+
+Prepaid metering is a hard stop: Developer 4 MB, Company 20 MB, Organizers 40 MB at $5/MB
+(average repo 500 KB). A run that would exceed remaining allowance is truncated; an empty
+balance refuses the next verification. Stripe auto-recharge is not wired yet.
+
 Surfaces: Dashboard, Targets (RocketRide preset plus custom products), New run (CSV batch),
 Quick verify, Runs (dossier grid + backbone tower), Settings, Plans. Runs and custom targets
-persist in workspace `appState` until staging-managed SQL is reachable from the
-signed-in app (`rocketride_sql`). If the broker does not inject identity, the
-workspace cache remains the store. Personal Postgres is not used.
+live in staging-managed SQL (`rocketride_sql`) when the signed-in app can reach the broker.
+If it cannot, the workspace `appState` cache is the store, namespaced per signed-in user.
+Personal Postgres is not used. SQL rows and the workspace cache are private to the
+signed-in `userId`.
 
 Identity comes from the shell (`useAuthUser()`). Every run and target write is stamped with
 the signed-in user. Theme, view, and plan fallback live in `usePrefs()` — not `localStorage`.
@@ -36,7 +49,8 @@ environment secrets:
 - `ROCKETRIDE_ANTHROPIC_KEY`
 - `ROCKETRIDE_GITHUB_TOKEN`
 
-Migration notes: [docs/BINDINGS.md](./docs/BINDINGS.md), [docs/CONTRACT.md](./docs/CONTRACT.md).
+Migration notes: [docs/BINDINGS.md](./docs/BINDINGS.md), [docs/CONTRACT.md](./docs/CONTRACT.md),
+[docs/MIGRATION-NOTES.md](./docs/MIGRATION-NOTES.md).
 
 ## Development
 

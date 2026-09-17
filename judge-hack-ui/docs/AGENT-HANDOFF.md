@@ -1,69 +1,56 @@
-# Judge Hack — agent handoff (entire conversation)
+# Judge Hack — agent handoff
 
-**Audience:** the next agent (or human) continuing this work. Reconstructs **one Cursor chat** from Sunday 30 Aug 2026 11:47 PT through Friday 4 Sep 2026 08:53 PT.
+**Audience:** the next agent or human. One Cursor chat from **Sun 30 Aug 2026** through **Wed 9 Sep 2026**.
 
-**Transcript (192 user turns, 1385 JSONL lines, tool traces):**  
-`C:\Users\Poushali\.cursor\projects\c-Users-Poushali-OneDrive-RocketRide-Inc-Desktop-RocketRide-Repositories\agent-transcripts\a5685dc3-7935-49af-a64d-88de3fdd82f3\a5685dc3-7935-49af-a64d-88de3fdd82f3.jsonl`
+**Transcript:** `C:\Users\Poushali\.cursor\projects\c-Users-Poushali-OneDrive-RocketRide-Inc-Desktop-RocketRide-Repositories\agent-transcripts\a5685dc3-7935-49af-a64d-88de3fdd82f3\a5685dc3-7935-49af-a64d-88de3fdd82f3.jsonl`
 
-**Earlier Claude Code backup this chat ingested:** `C:\Users\Poushali\Downloads\claude-session-backup.jsonl`
+**Earlier Claude backup ingested 30 Aug:** `C:\Users\Poushali\Downloads\claude-session-backup.jsonl`
 
 Do **not** treat this file as permission to commit, push, publish `@team`/`@public`, attach personal Postgres, invent Stripe `price_*`, or start Stage 4 unless the user asks.
 
 ---
 
-## 0. Snapshot right now (4 Sep 2026)
+## 0. Snapshot (10 Sep 2026)
 
 | Item | Value |
 |---|---|
 | Workspace | `c:\Users\Poushali\OneDrive - RocketRide Inc\Desktop\RocketRide Repositories` |
-| App | `apps/judge-hack-ui` · preview `judge-hack.rrapp` |
+| Live app (edit here) | `apps/judge-hack-ui` · `judge-hack.rrapp` |
 | App id | `hackjudge.judge-hack` · npm `hackjudge-judge-hack@0.1.0` |
 | Publisher / developerId | `hackjudge` |
-| Staging org | **Poushali's Workspace** |
-| Staging URL | `https://staging.rocketride.ai` |
-| Coupon | `HACKANAPP` (redeemed 1 Sep) |
-| Publish | `publishApp @me` **v10** (3 Sep) |
-| Stage 0 | Done |
-| Stage 1 | Done (deploy-ops / live metrics deferred by product) |
-| Stage 2 | Done (`validate` / `deployTo` / `verifyApp` / `addApp` / `@me`) |
-| Stage 3 | **Wired, not signed off.** Engine SQL broker unset staging **and** prod (`rocketride-server` **#2203**, Dmitrii). App correctly stays on workspace `appState`. Personal Postgres is **not** used. |
-| Stage 4 | **Not started.** Marketplace sign-off + `@me` → `@team` → `@public` via review. |
-| Tests last known | Vitest **51** passed, evaluator `test_stage1.py` OK, `tsc --noEmit` clean |
-| OS | Windows 10; PowerShell — use `npm.cmd` / `node`, **not** `npm.ps1` |
+| Staging | `https://staging.rocketride.ai` · org **Poushali's Workspace** |
+| Publish | `publishApp @me` **v13** (10 Sep). Schema/execute uses `CAST(... AS jsonb)` instead of `::jsonb` (SQLAlchemy `text()` treats `:jsonb` as a bind and the server returns “SQL execution failed”). SQL pipe pin `8e2a6c14` v3. |
+| Stage 0–2 | **Done.** Judging works end to end on `@me`. |
+| Stage 3 | **Verified in-app 10 Sep** (published `@me` switcher). Broker fix claimed earlier the same day. Banner = staging-managed SQL; 1 run survived hard reload; custom target `Stage3 SQL Probe` survived reload; Settings → Account is Poushali. Inventory: `docs/STAGE3-INVENTORY.md`. Prod broker not claimed. |
+| Stage 4 | **In progress (10 Sep).** Docs: `STAGE4-CHECKLIST.md`, `MIGRATION-NOTES.md`. Blocker before `@team`: copy the three pipe secrets from **user** overlay to **org** (owner, Account → Environment). Then republish `@me` (README + responsive CSS) and `publishApp @team/<name>`. Do not `submitApp` / `@public` unless asked. |
+| OS | Windows; use `npm.cmd` / `node`, not `npm.ps1`. |
 
-Judging **works** on `@me`. The app is **not** stuck on first deploy. Official Stage 3 SQL is blocked on platform wiring, not app code.
+GitHub (9 Sep push): branch **`rocketride-shell`** on https://github.com/Poushali0202/hackathon-usage-verifier — folder `judge-hack-ui/`. Branch **`phase-2`** is the **old** FastAPI + Vite app (last commit 28 Aug). Local Hopper/`eval` edits in `Projects/hackathon-usage-verifier` were **not** committed.
 
 ---
 
 ## 1. What this app is
 
-**Judge Hack** verifies how hackathon GitHub repos use a target product.
+Judge Hack verifies how hackathon GitHub repos use a target product.
 
-- **RocketRide preset** = pipeline/RAG rubric (deterministic Python).
-- **Custom targets** = eight generic SDK/platform signals. Architecture templates are a **view** of those signals, not a new scorer. The UI tower is always **5 isometric layers**; only labels change.
-- The LLM **never** writes tag, backbone, or score. Explain fills “What it is” / “How used” / “Verdict rationale” after the verdict.
-- Original product: `Projects/hackathon-usage-verifier` (FastAPI + Vite). SoT for eval: `eval/engine.py`, `target.py`, `extract.py`, `SCORING_SPEC.md`. Snapshotted into `apps/judge-hack-ui/src/verify/generated/evaluatorBundle.ts` via `tools/gen-evaluator-bundle.mjs`.
-- **Wrong/old scaffold:** do **not** use `apps/hack-judge-ui` (`local.hack-judge`).
-- **100% RocketRide catalog usage is a hard rule** (user, 31 Aug). Custom `hackjudge_*` nodes are **not** for v1. A generic `repository_evidence`-style node was deferred to v2 if Daytona load-bearing fails in production.
-- Fail-closed: never give a verdict on partial retrieval / truncated payload. Show failed.
-
-Signed-in identities seen: `poushalipurkayastha24@gmail.com` (probes) and `poushali.debpurkayastha@gmail.com` (Dashboard).
+- RocketRide **preset** = pipeline/RAG rubric (deterministic Python). Custom targets = **eight generic signals**. Architecture templates only **relabel** a 5-layer isometric tower.
+- LLM **never** writes tag, backbone, or score. Explain fills What it is / How used / Verdict rationale after the verdict.
+- Original product: `Projects/hackathon-usage-verifier` (`app/` FastAPI, `frontend/` Vite, `eval/`). SoT for scoring: `eval/engine.py`, `target.py`, `extract.py`, `SCORING_SPEC.md` → bundled as `apps/judge-hack-ui/src/verify/generated/evaluatorBundle.ts`.
+- Do **not** use `apps/hack-judge-ui` (`local.hack-judge`).
+- **100% catalog usage is a hard rule.** No `hackjudge_*` nodes in v1. Daytona for clone+eval (`tool_python` has no network). Dummy `agent_rocketride` exists so `tool_daytona` / SQL execute can be `client.tool`; agent must not invent JSON.
+- Fail-closed: never verdict on partial retrieval.
 
 ---
 
-## 2. Hard constraints (still in force)
+## 2. Hard constraints
 
-- Never invent Stripe `price_*`. Manifest: Developer 2000¢ / Company 10000¢ / Organizers 20000¢ USD, `interval: "one_time"`.
-- Never `new RocketRideClient()` **in the app**. Probe/publish scripts in `tools/` may construct a client from workspace `.env`.
-- No `localStorage` for durable state. Prefs: `usePrefs()` (`hj.theme`, `hj.view`, `hj.runId`, `hj.plan` fallback).
-- No `hackjudge_*` custom nodes. Catalog only. `tool_python` has **no network**; Daytona is the sandbox.
-- Sign-in is shell-gated (`authenticated: true`). Checkout is in-app dialog (`CheckoutHost`), not a hanging `shell:subscribe` from Design preview. Live Stripe only if Store prices exist.
-- Fail-closed on inaccessible / incomplete repos.
-- Do not commit unless the user asks.
-- Do **not** set `ROCKETRIDE_HACKJUDGE_PG_*` or deploy `hackjudge_sql_v1.external.pipe` / `storeVariant=external` unless the user **explicitly** overrides after the broker is still down **and** product agrees. **Today: do not.** Early in this chat (30 Aug) personal Supabase **was** used for a throwaway `db_postgres` probe; Stage 3 later reversed that.
-- Do not start Stage 4 unless asked.
-- Windows: `npm.cmd test`, `npm.cmd run stage2`, `npm.cmd run sql-probe`.
-- Design canvas may rewrite `project_id` on watched `pipelines/` folders. Pins live in `tools/gen-pipes.mjs`. Runtime Daytona/SQL **clone** `project_id` on `client.use()`. Re-run `node tools/gen-pipes.mjs` to restore pins; tests run `gen` first.
+- No invented Stripe `price_*`. Plans: Developer 2000¢ / Company 10000¢ / Organizers 20000¢, `one_time`.
+- No `new RocketRideClient()` **in the app**. Tools under `tools/` may use workspace `.env`.
+- No `localStorage`. Prefs: `usePrefs()` (`hj.theme`, `hj.view`, `hj.runId`, `hj.plan`).
+- No `shell:loginRequest` from the app (Design preview spun forever). Checkout is `CheckoutHost`, not hanging `shell:subscribe`.
+- Do **not** deploy `hackjudge_sql_v1.external.pipe` or set `storeVariant=external` / `ROCKETRIDE_HACKJUDGE_PG_*` unless the user overrides. 30 Aug throwaway used personal Supabase `db_postgres`; **reversed** for Stage 3.
+- Pins in `tools/gen-pipes.mjs`. Tests and `stage2-publish.mjs` run `gen` first. Runtime Daytona **clones** `project_id` per sandbox.
+- Do not `publishApp @team` until org-scope secrets exist. Do not `submitApp` / `@public` unless the user asks.
 
 ---
 
@@ -71,181 +58,146 @@ Signed-in identities seen: `poushalipurkayastha24@gmail.com` (probes) and `poush
 
 | Who | Role |
 |---|---|
-| Poushali Deb Purkayastha | App owner; this conversation |
-| Shashidhar Babu | App-side / Stage 1 taste + migration checklist (`shashidhar.babu@rocketride.ai`). Gemini notes: `C:\Users\Poushali\Downloads\Judge Hack App - Poushali - 2026_09_01 13_44 PDT - Notes by Gemini.md`. Design skills: https://github.com/shashidharbabu/claude-design-skills |
-| Dmitrii Karataev | Staging outage, server build, **DB broker**, release train. Issue **rocketride-server #2203**. |
-| Dylan | Catalog-only; rejected Judge-Hack-specific custom nodes for v1 |
-| Joe | Memory Meets Motion sheet (~30 unique GitHub URLs) used as scale test |
+| Poushali | App owner |
+| Shashidhar Babu | Migration checklist, taste, Rod thread |
+| Dmitrii Karataev | Engine SQL broker, **rocketride-server #2203** |
+| Rod Christensen | App Builder feedback (9 Sep). GitHub: OSS `rocketride-org/rocketride-{appid}`; SaaS unusual `rocketride-ai/rocketride-{appId}`. Parallel `use()`: he said `useExisting=true` (does **not** replace clone-per-worker for N sandboxes). Pipe ids: he said agent generated new ids / include pipe in app. Design preview: he does not understand (our proven issue is `shell:loginRequest` spin, not Full Screen). **Local SaaS `feat/app-2`:** admin bootstrap changed — see §3.1. |
+| Dylan | Catalog-only; no Judge-Hack-specific custom node |
+| Joe | Memory Meets Motion ~30-repo sheet |
+| Mansi / Mithilesh | Shashi said they **can** use SQL on staging. Likely **`db_postgres` + credentials**, not `rocketride_sql` + broker. Ask which node before treating #2203 as org-specific. |
 
-**Shashi one-liner Poushali asked for (generic, not broker-jargon):**  
-“Facing an issue signing in to the RocketRide managed database on staging, so run history can’t move off the workspace yet.”
+### 3.1 Local SaaS admin bootstrap (`feat/app-2`) — Rod, 9 Sep ~9:20 AM
 
----
+**Does not apply to Judge Hack on `staging.rocketride.ai`.** Only if someone runs the **SaaS backend locally** on branch **`feat/app-2`**.
 
-## 4. Overlay docs (source of stages)
+**Was:** list of admin emails; after login those users got admin.
 
-`C:\Users\Poushali\Downloads\app-development-docs\app-development-docs\`
+**Now (multi-org):** a **`.bootstrap`** JSON file creates orgs, teams, roles, and subscriptions on **first creation of the SaaS database** only — not on every start, not for staging cloud.
 
-- `00-INDEX.md` — stages 0–4
-- `03-migration-to-staging.md` — Stage 2 = §6–§9
-- `05-data-migration.md` — Stage 3
-- `06-ready-to-deploy-checklist.md` — Stage 4 packet for Shashi
+Rod’s example (his file, not ours — do not copy his admin grants into Judge Hack):
 
-Also used: `C:\Users\Poushali\Downloads\docs` (browser docs dump). Platform: workspace `.rocketride/docs/` (`ROCKETRIDE_APPS.md`, `ROCKETRIDE_PIPELINES.md`, TypeScript API `client.database`). Public node doc: `https://docs.rocketride.org/nodes/rocketride_sql.md`.
-
----
-
-## 5. Pipes, secrets, publish
-
-Stable IDs pinned in `tools/gen-pipes.mjs` (`PROJECT_IDS`):
-
-| Pipe | `project_id` | Notes |
-|---|---|---|
-| Judge Hack Daytona V1 | `bde4acbb-7db2-4a97-8d01-28214a1bc284` | Dummy `agent_rocketride` so `tool_daytona` can be `client.tool`. Agent must not invent JSON. |
-| Judge Hack Explain V1 | `cf2762a0-ee71-4f77-9d99-1296e81e71b4` | Post-verdict prose only |
-| Judge Hack SQL V1 | `8e2a6c14-b7f1-4d93-9a50-1c4e8f2d7b36` | `rocketride_sql`, node id **`sql_1`**, `allow_execute: true` |
-| SQL external (generated only) | `c5d9e2b8-1a47-4f06-8d3c-9b7e0a4f2c18` | `db_postgres` placeholders `${ROCKETRIDE_HACKJUDGE_PG_*}` — **not deployed** |
-
-Canonical copies: `apps/judge-hack-ui/src/pipelines/`. Workspace `pipelines/` is for disk tooling. After v10 publish, Design rewrote SQL default in `src/pipelines` to `116582bb-a601-42ef-ba54-bd654592850f` and the workspace copy to `e8f7e295-89fc-4630-931d-e65d830dcde6`. Runtime clones anyway.
-
-**Secrets (Environment overlay; USER-scope historically, org needed before `@team`):**  
-`ROCKETRIDE_ANTHROPIC_KEY`, `ROCKETRIDE_DAYTONA_KEY`, `ROCKETRIDE_GITHUB_TOKEN`.
-
-Leftover `ROCKETRIDE_HACKJUDGE_PG_*` may still exist from the 30 Aug probe — **do not use**. `.env.example` comments them as unused.
-
-No `deploy.setSchedule`.
-
-Publish path: `node tools/stage2-publish.mjs` → gen → validate → `deploy.add({ deployTo })` → `verifyApp` → `addApp` → poll `buildStatus: 'ok'` → `publishApp(..., '@me')`. Flags: `--validate-only`, `--verify-only`, `--skip-pipes`, `--skip-app`. Known versions: v4 explain-parse, v6 Daytona clone-per-sandbox, v7/v8 Stage 2 packs, **v10** SQL wiring + tower CSS + store banner.
-
-Design `.rrapp` preview is **not** the shareable app. Switcher `@me` is.
-
----
-
-## 6. Scoring / evaluator (load-bearing product)
-
-Evaluator SoT remains Python in the sandbox. TypeScript does not reimplement scoring.
-
-**Hopper 1.0 was too low.** Harvest missed `rocketride` in workspace `packages/*/package.json` (only first 8 manifests) and missed `client.use({ pipeline })` without a canvas `.pipe`. Falkor `pipelines/*.pipe.json` (Cypher) correctly ignored.
-
-Engine now (`eval/engine.py`, bundled):
-
-- `_manifest_paths()` — up to 24 manifests, root then workspace packages
-- Synthetic `<in-code pipeline>` when inline `client.use({ pipeline })` and no called RR pipe
-- `import('rocketride')` counts toward file spread
-
-Fixture: `eval/fixtures/inline-monorepo.json`. Expected Hopper: **Significant / Yes / ~4.5**.
-
-Joe Memory Meets Motion sheet (~30 unique URLs). Known expected 404s: `KrambitPL/ai-native-trading`, `Mr-Shockwave/Trailbridge`, `jymiller/hack-memory-motion`, `catiemcnama/memoryhack`. Atrium **10.0 → Moderate / No** is spec (Significant gated on backbone). Live switcher: Hopper Significant / 4.5 / Backbone Yes, `in-code pipeline` (5 nodes), real explain prose. Later run **nnnn**: 30/30, 14 Significant, ~2m23s.
-
-**Architecture templates** (Shashi, 1 Sep): do **not** judge Laserdata/Butterbase on RocketRide RAG layers. Custom products use 8 generic signals; 5-layer tower is branding with **labels only** changing. User insisted: do not restyle the isometric tower.
-
-Shashi Slack label pass: product pills **Code / SDK**, **Platform / hosting**, **API / service**. Target tabs: **In their code**, **If they hosted on you**, **How we score**. Fields: `src/pages/Targets.tsx` (`CODE_FIELDS`, `PLATFORM_FIELDS`, `SCORE_SIGNALS`). Templates: `src/verify/architecture.ts` / `eval/target.py`.
-
-Company/Organizers may persist per-target `weights` / `thresholds`. Developer uses team defaults. User asked that scoring not look “unchangeable” for organizers.
-
-**Explain-parse (v3/v4):** dossiers showed stale “classifier unreachable.” Fix: `src/verify/explainParse.ts` prefers `answers`, sanitizes, never reads tag/backbone/score.
-
-**Daytona pool:** staging keys tasks by `project_id + source`. Second `client.use()` on the same pipe → **Pipeline is already running**. Pool dropped to 1 sandbox. Fix: `clonePipelineForSandbox()` in `src/verify/pool.ts`; `openDaytona` clones pipe + fresh UUID. Probe: `tools/daytona-load-probe.mjs`. Live: 4 sandboxes, 8 repos, ~40s wall. Workers: 4 default; 8 Company/Organizers. One repo per sandbox.
-
-Font: Shashi asked; app still uses `--rr-font-family` (shell). No custom Judge Hack webfont. Mono for scores.
-
----
-
-## 7. Stage 3 SQL (wired, blocked)
-
-Pathway: existing `rocketride_sql`. **No new node.** Docs: no host/user/password on that node; `allow_execute` required for `client.database.query` / execute. Catalog still requires `invoke.llm` min 1 (dummy agent in the graph).
-
-Files:
-
-- `tools/gen-pipes.mjs` — SQL default + external, shared `sql_1`
-- `src/pipelines/hackjudge_sql_v1.pipe` + `.external.pipe`
-- `src/verify/sqlSchema.ts` — `hj_runs`, `hj_targets` JSONB; mappers; `shouldImportAppState`; max 40 runs
-- `src/verify/sqlStore.ts` — `openSqlStore`, clone pipe, `database.query` then `tool execute` fallback, schema, upsert, import, prune
-- `tools/sql-probe.mjs` — `npm run sql-probe`
-- `src/RunsContext.tsx` — hydrate SQL when connected; import appState if SQL empty; dual-write appState; `store` status
-- `src/components/bits.tsx` — `StoreBanner`
-- Dashboard, Runs, Settings store copy
-- `package.json` — `hackjudge.judge-hack.storeVariant` enum `default` | `external`
-
-**API-key probe:** `ROCKETRIDE_CLIENT_ID is not set; RocketRide cloud DB nodes require a signed-in RocketRide cloud identity`. Doc 05: API-key sessions fail by design.
-
-**Signed-in switcher banner:** *“Staging SQL did not get a signed-in cloud identity (broker). Runs stay in this workspace until that is enabled. Personal Postgres is not used.”*
-
-Dashboard “missing previous runs” is **not** a filter. Design preview vs `@me` can have **separate appState**. Cap 40. Until SQL works, history is workspace-local.
-
-### Dmitrii Slack (3 Sep evening; pasted 4 Sep)
-
-Poushali 3:53 PM: enable staging SQL broker for org (Poushali’s Workspace / `hackjudge`) so `rocketride_sql` works from signed-in app; `@me`; `ROCKETRIDE_CLIENT_ID`; no personal PG; need `SELECT 1`.
-
-Dmitrii 7:30 PM: first thought = org `hackjudge` lacked a cloud SQL identity in staging data-core.
-
-Dmitrii 8:13 PM: **platform-wide**. `rocketride_sql` reaches data-core via engine broker (`ROCKETRIDE_DB_BROKER_URL` + token). **Unset on staging and prod.** Data-core DB + provisioner exist; **engine→broker wiring never done.** No tenant can resolve a DB. Enabling is real integration + security (broker credential can resolve any tenant DB; TLS + scoping; signed-in identity must flow to the task). Plan: **rocketride-server #2203**. Will ping when staging cloud SQL is live. Not a tonight toggle.
-
-**Clarifications already given:**
-
-- Apps do **not** set `ROCKETRIDE_DB_BROKER_URL`; the **engine** does. Node asks broker “this org → which tenant DB?”
-- Until resolved: workspace `appState`, **not** personal Postgres.
-- App is **not** stuck on deployment; `@me` is live. Blocked: Stage 3 SQL history / checklist sign-off. Judging still works.
-- Stage 4 = marketplace sign-off + `@me`→`@team`→`@public`, not first deploy.
-
-### When Dmitrii says staging SQL is live
-
-1. Open published Judge Hack from switcher (latest `@me`, no `dev` badge).
-2. Banner should become: runs live in staging-managed SQL (maybe “imported N workspace row(s)”).
-3. Confirm `nnnn` / other appState runs imported or re-run a small batch; Dashboard counts match.
-4. Confirm Design and switcher see the same history.
-5. API-key `sql-probe` may still fail; OK if signed-in app works.
-6. Do **not** deploy external `db_postgres`.
-7. Then tick Stage 3; Stage 4 only if asked. Finish leftover doc 05 boxes (inventory note, leftover PG env keys removed). Org secrets before `@team`.
-
-CONTRACT gate 3 (SQL counts after import) is **open**.
-
----
-
-## 8. Architecture (runtime)
-
-```
-Judge UI (shell AppLayout)
-  → useAuthUser / useWorkspace / usePrefs / useSubscriptions
-  → RunsContext: appState always; rocketride_sql if broker injects identity
-  → Verify: client.use(cloned Daytona pipe) → client.tool Daytona → Python evaluator bundle
-  → Explain: client.use(explain pipe) → Anthropic; parse answers only
+```json
+{
+	"rod.christensen@rocketride.ai": {
+		"sys": ["sys.admin", "sys.app"],
+		"defaultOrg": "Platform",
+		"orgs": [
+			{
+				"org": "Platform",
+				"role": "admin",
+				"devTeam": "Dev",
+				"teams": ["Dev", "Prod"],
+				"subscription": {
+					"plan": "Pro",
+					"credits": { "initial": { "tokens": 1000000 } }
+				}
+			}
+		]
+	}
+}
 ```
 
-Pages: Dashboard, Targets, New run, Quick verify, Runs / run detail, Settings, Plans.
+Keys: email → `sys` roles, `defaultOrg`, `orgs[]` with `org`, `role`, `devTeam`, `teams`, `subscription.plan` / `credits.initial.tokens`.
 
-Bindings inventory: `docs/BINDINGS.md`. Contract: `docs/CONTRACT.md`.
-
-Plan is entitlement from `useSubscriptions()`, not a user-editable setting. Unsubscribed/past_due → Developer; `free`/`auth`/no prices → `hj.plan` pref so workspace stays usable. Company-gated features also unlock for Organizers (`isCompanyPlan`).
+No `.bootstrap` file exists in this workspace today. If Poushali ever runs local SaaS on `feat/app-2`, she needs her own file (her email, her org — e.g. Poushali's Workspace / `hackjudge`), and a **fresh** local SaaS DB create for it to apply.
 
 ---
 
-## 9. File map
+## 4. Pipes (pinned in `tools/gen-pipes.mjs`)
+
+| Pipe | Pin |
+|---|---|
+| Daytona | `bde4acbb-7db2-4a97-8d01-28214a1bc284` |
+| Explain | `cf2762a0-ee71-4f77-9d99-1296e81e71b4` |
+| SQL default `rocketride_sql` `sql_1` | `8e2a6c14-b7f1-4d93-9a50-1c4e8f2d7b36` |
+| SQL external `db_postgres` (generated, **not deployed**) | `c5d9e2b8-1a47-4f06-8d3c-9b7e0a4f2c18` |
+
+Canonical copies: `apps/judge-hack-ui/src/pipelines/`. Workspace `pipelines/` is Design-watched and **has drifted**.
+
+Secrets (USER overlay today; **org** before `@team`): `ROCKETRIDE_ANTHROPIC_KEY`, `ROCKETRIDE_DAYTONA_KEY`, `ROCKETRIDE_GITHUB_TOKEN`.
+
+---
+
+## 5. Proven vs not (do not overclaim)
+
+### Proven
+
+- **`rocketride_sql` from signed-in `@me` does not store runs.** Banner: *Staging SQL did not get a signed-in cloud identity (broker)… Personal Postgres is not used.*
+- **API-key** `npm run sql-probe`: exact `ROCKETRIDE_CLIENT_ID is not set; RocketRide cloud DB nodes require a signed-in RocketRide cloud identity`. Doc 05: API-key fail is by design.
+- **Dmitrii:** engine broker `ROCKETRIDE_DB_BROKER_URL` unset on **staging and prod**. Data-core exists; wiring never done. #2203. 8 Sep: open, unassigned, no PR, no timeline; first test tenant when live; do not plan SQL e2e this week.
+- **Parallel `client.use()`:** same pipe → `Pipeline is already running`. Staging keys owner + `project_id` + source. Docs (`ROCKETRIDE_APPS.md`) already say start once / `useExisting`. Gap: **N sandboxes need N `project_id`s.** Workaround: `clonePipelineForSandbox()` in `src/verify/pool.ts`. 4 sandboxes, ~30 repos, ~2m23s.
+- **On-disk `project_id` drift (4 Sep)** vs generator pins: workspace `pipelines/` all four drifted; `src/pipelines` SQL + external drifted. **Actor not traced** (Design open, first index, or deploy write-back). Rod: “agent generated a new id.” Counter: ids were **pinned** and **still changed**.
+- **Design preview + `shell:loginRequest`:** preview went to Sign in required and spun. App no longer emits it. `@me` not asking to sign in is **intended** (already in staging shell).
+- **Dashboard 0 runs after SQL was green (10 Sep):** published `@me` skipped applying empty SQL (`if (latest.runs.length)`), so a late workspace hydrate never appeared. SQL store also cloned a new `project_id` per page load (Daytona pool helper — wrong for a durable DB). **Fixed on `@me` v11** (10 Sep): keep workspace rows when SQL is empty; `useExisting` on the pinned SQL pipe. Morning run + Stage3 SQL Probe were already gone from this tenant DB.
+
+### Not proven / do not lead with
+
+- Design vs `@me` **separate `appState`** as a measured two-scope fact. 3 Sep missing Dashboard runs: list is `appState` with no filter. Bidirectional Design↔switcher check **was not done**.
+- “`.pipe` emptied by Design” — agent inference, no saved empty file.
+- Judge Hack issue is a **connection timeout** — **Shashi mixed threads.** Ours is broker/identity, not timeout.
+- Mansi/Mith “SQL works” ≠ `rocketride_sql` broker path until they confirm node + credentials + signed-in app vs canvas.
+- `tool_python` “undocumented”: catalog says restricted sandbox; timeout text mentions “network scans” (misleading). Network fetch is Daytona.
+- Full-screen vs Sidebar/Status/Tabs **is not Poushali’s issue.** Judge Hack wants `AppLayout`.
+
+---
+
+## 6. Stage 3 leftover
+
+**Switcher verify + inventory done 10 Sep.** See `docs/STAGE3-INVENTORY.md`.
+
+- Banner is staging-managed SQL (not the broker error). This `@me` `appState` was empty — no import, no old `nnnn` rows.
+- 1 run and custom target `Stage3 SQL Probe` survived hard reload.
+- Account card is Poushali; stamps inferred from that signed-in save path (Design canvas is not a SQL editor).
+- Keep `storeVariant=default`. Do **not** deploy the external pipe. API-key `npm run sql-probe` may still fail (`ROCKETRIDE_CLIENT_ID`); that is OK.
+
+Optional leftovers (not required to tick Stage 3): Design vs switcher same-run check; delete the throwaway target; republish `@me` for responsive CSS.
+
+Do not switch to personal Postgres. Prod broker is out of Stage 3.
+
+---
+
+## 7. GitHub (9 Sep)
+
+| | |
+|---|---|
+| Old app | `phase-2` — FastAPI + Vite, last push 28 Aug. https://github.com/Poushali0202/hackathon-usage-verifier |
+| Current shell app | `rocketride-shell` — `judge-hack-ui/` copy of `apps/judge-hack-ui` (no node_modules/dist/.env). https://github.com/Poushali0202/hackathon-usage-verifier/tree/rocketride-shell/judge-hack-ui |
+| Commit | `eba36a4` Add the RocketRide shell Judge Hack app… |
+
+Edit **`apps/judge-hack-ui`** in the RocketRide workspace; re-copy/push if Shashi needs GitHub updated. Local verifier checkout may still be on `rocketride-shell` with dirty `eval/` — switch `git checkout phase-2` for old-app work.
+
+Rod location guidance: public OSS `rocketride-org/rocketride-{appid}`; internal SaaS `rocketride-ai/rocketride-{appId}`. This share was Poushali’s personal GitHub for Shashi ASAP.
+
+---
+
+## 8. Scoring / Daytona (load-bearing)
+
+Hopper 1.0 was too low: harvest missed workspace package manifests and in-code `client.use({ pipeline })`. Engine now: up to 24 manifests; synthetic `<in-code pipeline>`. Fixture `eval/fixtures/inline-monorepo.json`. Expected Hopper Significant / Yes / ~4.5. Live switcher confirmed.
+
+Joe sheet ~30 URLs; 14 Significant on 30-repo runs. Known 404s: `KrambitPL/ai-native-trading`, `Mr-Shockwave/Trailbridge`, `jymiller/hack-memory-motion`, `catiemcnama/memoryhack`.
+
+Workers: 4 default; 8 Company/Organizers.
+
+Font: shell `--rr-font-family` only. No custom webfont.
+
+---
+
+## 9. File map and commands
 
 | Path | Why |
 |---|---|
-| `tools/gen-pipes.mjs` | Only owner of `.pipe` graphs + pinned IDs |
+| `tools/gen-pipes.mjs` | Pipe graphs + pinned IDs |
 | `tools/gen-evaluator-bundle.mjs` | Python → `evaluatorBundle.ts` |
-| `tools/stage2-publish.mjs` | validate, deployTo, verifyApp, addApp, publish `@me` |
-| `tools/sql-probe.mjs` | API-key SELECT 1 (expected fail until engine broker) |
-| `tools/daytona-load-probe.mjs` | 4-sandbox load probe |
-| `src/verify/session.ts` | Batch verify + pool |
-| `src/verify/pool.ts` | Worker count + clonePipelineForSandbox |
-| `src/verify/daytonaInvoke.ts` | Daytona tool invoke |
-| `src/verify/explain.ts` / `explainParse.ts` | Post-verdict prose |
-| `src/verify/architecture.ts` | 5-layer templates as view of signals |
-| `src/verify/sqlSchema.ts` / `sqlStore.ts` | Stage 3 store |
-| `src/RunsContext.tsx` | Runs/targets/settings/store hydrate |
-| `src/components/Tower.tsx` + `app.css` | Backbone tower + Load-bearing layout |
-| `src/components/ResultsGrid.tsx` | Run results |
-| `src/components/bits.tsx` | `StoreBanner` |
-| `src/pages/Targets.tsx` | Custom target editor / Shashi labels |
-| `src/CheckoutHost.tsx` / `billing.ts` | Plans / subscribe dialog |
-| `docs/CONTRACT.md` / `BINDINGS.md` | Pinned migration decisions |
-| `package.json` `appManifest` | id, billing, settings including `storeVariant` |
-| `Projects/hackathon-usage-verifier/eval/` | Evaluator SoT |
+| `tools/stage2-publish.mjs` | validate, deployTo, verifyApp, addApp, `publishApp @me` |
+| `tools/sql-probe.mjs` | API-key SELECT 1 |
+| `tools/daytona-load-probe.mjs` | 4-sandbox probe |
+| `src/verify/pool.ts` / `session.ts` | Clone per sandbox |
+| `src/verify/sqlStore.ts` / `sqlSchema.ts` | Stage 3 store |
+| `src/App.tsx` | No `loginRequest`; `useSidebarCollapsed` |
+| `src/app.css` | Responsive 960/680/420 |
+| `docs/CONTRACT.md` / `BINDINGS.md` | Pinned decisions |
 
-Commands from `apps/judge-hack-ui`:
+From `apps/judge-hack-ui`:
 
 ```text
 npm.cmd run gen
@@ -255,122 +207,43 @@ npm.cmd run sql-probe
 npm.cmd run stage2
 ```
 
----
-
-## 10. Stage 4 (not started) — what it is
-
-Doc `06-ready-to-deploy-checklist.md`:
-
-- Switcher launch (no `dev`) — largely done for `@me`
-- First-run / empty states for a fresh user
-- Every write path; scheduled pipes (none here)
-- Error states (broker banner already exists)
-- Icon / README / categories in listing
-- Publish: `@me` → `@team` → `@public` via review. **Org secrets before `@team`.**
-- Migration notes to Shashi (diverge: no custom node; SQL blocked on #2203; `appState` until broker)
-
-User asked 3 Sep: can they share / publish `@team` now? Answer then: `@me` only until Stage 4; `@team` needs org-scope secrets. Doc does require `@team` before `@public`, but **not** immediately after Stage 2.
+Overlay docs: `C:\Users\Poushali\Downloads\app-development-docs\app-development-docs\` (`05-data-migration.md` Stage 3, `06-ready-to-deploy-checklist.md` Stage 4).
 
 ---
 
-## 11. Full chronology (this conversation)
+## 10. Chronology (compressed)
 
-Duplicate/system turns (dynamic-tool catalog injects, “Briefly inform the user”) omitted. Screenshots were frequent; outcomes are what the agent confirmed after looking at them.
+**30 Aug–1 Sep:** Stage 0 Cloud connect (`hackjudge`), scaffold `apps/judge-hack-ui`. Catalog vs custom node → Daytona v1. Throwaway `rocketride_sql` then personal `db_postgres` (later reversed). UI fidelity to original Phase 2. Fail-closed. Architecture templates for Laserdata/Butterbase (not RR RAG). Shashi taste pass except deploy-ops. `HACKANAPP` redeemed.
 
-### Sunday 30 Aug 2026 — Stage 0 environment + first pipe probes
+**2–3 Sep:** Stage 2 pipes, Joe sheet, parallel Daytona, explain-parse, Hopper harvest, clone-per-sandbox, `@me` v6–v10. Load-bearing CSS. Stage 3 SQL wiring. Signed-in banner = broker. Dmitrii #2203.
 
-1. User: analyze overlay docs and guide all steps. Agent walked Stages 0–4 against Judge Hack.
-2. Ingest `claude-session-backup.jsonl`; continue from prior Claude session. Objective: migrate hackathon-usage-verifier into a RocketRide shell app on staging.
-3. Dylan / Phase-2 vision: catalog nodes only; no Judge-Hack-specific custom node for v1.
-4. First step: Stage 0 environment (extension, Cloud, developerId), not pipelines yet.
-5–10. Cursor-new-user friction: do **not** open a nested folder as a new window (kills the chat). Keep parent workspace. Install RocketRide extension. Cloud connect, not Direct (Direct wants API key). Sign-in is in the RocketRide sidebar, not Cursor Account.
-11–12. Follow overlay docs exactly. Browser dump at `C:\Users\Poushali\Downloads\docs`.
-13–18. Direct Connect API-key confusion; Cloud mode succeeded; URL/org mismatch then Connected; empty Apps until developerId.
-19–24. Deploy tab vs Apps tab. Hack Judge not listed until new app scaffold. User got `developerId=hackjudge`. **OK to create a new app** (`hackjudge.judge-hack` in `apps/judge-hack-ui`), not reuse `local.hack-judge`.
-25. Agent ran scaffold/connect commands. 26. Stage 0 in progress. 27. `.rrapp` opened correctly → remaining Stage 0 then Stage 1.
+**4 Sep:** Agent handoff v1. Rod/Shashi builder feedback (SQL, parallel use, pipe ids, preview, tool_python, CLIENT_ID wording). Responsive CSS. Stage 3 leftover = wait on broker. Design vs `@me` appState **not** proven both ways.
 
-Evening: catalog vs quality. User asked if catalog can do the whole app. Agent: yes for v1 with Daytona + explain + later SQL. User: go ahead with catalog/schema validation and throwaway staging probe.
+**8 Sep:** Dmitrii: no movement on #2203. Shashi: thought issue was timeout + “use postgres SQL nodes.” Correction: we **do** use `rocketride_sql`; failure is broker, not timeout. Mansi/Mith “works” → ask node type.
 
-32. Can PostgreSQL node be used instead? (of rocketride_sql / later of custom). 33–34. Next steps in order. 35. How to resolve database-node routing in staging. 36. Create `.pipe` yourself.
+**10 Sep:** Slack to Shashi: staging cloud-DB blocker fixed (TLS on datacore provisioner + engine wired to DB broker via staging ALB). Switcher verify later the same day: SQL banner, 1 run + `Stage3 SQL Probe` survived reload, Account is Poushali. Inventory in `docs/STAGE3-INVENTORY.md`. Prod not claimed.
 
-37–44. Canvas/pipe errors; user didn’t declare `ROCKETRIDE_HACKJUDGE_*` vars (agent invented names for probe). Switch probe to `rocketride_sql`. Pipe not visible until generated/opened. Errors then “fixed, run it.” `rocketride_sql` failed without cloud identity.
-
-45. Can we migrate without it? Yes for Stage 1–2 (`appState`). SQL is Stage 3.
-
-46–57. User preferred `db_postgres` and asked for credentials. They used **previous Supabase** credentials; agent switched probe to `db_postgres`; Design wouldn’t open pipe; user found Supabase dashboard secrets; paid-tier vs free-tier; probe eventually **Perfect**.
-
-**Later product decision reversed this.** Do not treat that successful personal-PG probe as the production store.
-
-58–60. Proceed with app migration; rebuild backend on catalog. Go ahead.
-
-61. Agent+`tool_python` safer? 62. Custom node if needed must be **generic**, only if no catalog combo works. 63. Truncated data in Phase 0/1 with `tool_python` / `tool_github`. 64. USP = latency + accuracy + GitHub freshness. 65–67. Production B2B: Daytona vs custom; **100% RR usage is a hard rule**. Plan: **v1 Daytona**, v2 generic evidence node if needed. 68. Execute Daytona plan on `judge-hack.rrapp`. 69. Where to get Daytona key. 70. Overlay secrets added.
-
-### Monday 31 Aug — Stage 1 UI fidelity, fail-closed, billing
-
-71–76. Canvas/env UI confusion; “Fix it now.” 77. Preview looked unlike Judge Hack. Agent: scaffold was generic; need original Phase 2 UI. 78–79. Go ahead.
-
-80. Cross-verify results; New target not clickable. 81–82. Summary cropped; target prefill from public repo/manifest missing. 83. Exact UI scaffolding complete? 84. Want **exact original** UI. 85–86. Dark theme toggle no-op; need original Phase 2 UI. 87. Preview error — fix. 88–90. LLM summary skipped; user wants What it is / How used back; still missing. 91–92. Almost all repos failed — debug.
-
-93. Payment/auth/billing vs overlay docs. 94. Which stage? Stage 1 in progress. 95–96. Finish Stage 1 gaps. 97. No Sign In / checkout in preview (`authenticated: true` is shell-gated). 98. Checkout unclear; is migration complete? 99. Sign-in spin forever — Design vs published; in-app dialog instead of hanging `shell:subscribe`. 100. Conversational team update on Stage 1 + why v2 custom node. 101. Preview errored — fix.
-
-102–104. UI “disoriented”; dashboard look changed; left panel (Run, Target) missing — restore AppLayout sidebar. 105. Platforms / API tabs not clickable on Targets. 106. Rubric/matrix LLM vs deterministic? **Deterministic engine**; LLM explain only. 107. Test Laserdata target vs Laserdata repo. 108. Failed — debug. 109. **Never verdict on partial retrieval; fail closed.** 110–111. Failed again — fix once and for all.
-
-### Tuesday 1 Sep — architecture templates, Shashi Stage 1 close
-
-112. Shashi: would Laserdata be judged by RAG pipelines? Butterbase too? 113. Many products, different layers. 114. How to test. **Decision:** generic 8 signals + architecture **templates as a view**; do not score Butterbase as RocketRide RAG.
-
-115–116. 5-layer labels overflow into text box — fix. 117. Suggest another product category for label testing (Vercel-style hosting used). 118. Verdict + tower disoriented / not 5 layers — justify + fix. 119. **Do not change 5-layer isometric brand; only labels change.** 120. Draft Shashi reply (Vercel + Laserdata screenshots). 121. How unknown products are handled (templates + 8 signals, organizer describes product). 122–123. Stage vs overlay docs: **Stage 1**, Stage 0 already done. 124. Daytona load-bearing vs custom node necessity — probe later (done 3 Sep: clone-per-sandbox, no custom node).
-
-125. Analyze Gemini notes of Shashi Stage 1 call. 126–128. Apply Shashi asks + https://github.com/shashidharbabu/claude-design-skills **except** “Deploy metrics need a backing pipeline.” Taste/copy pass; skills used as guidance, not a new webfont. 129. Scoring UI “unchangeable?” 130. Organizers/companies **should** customize weights/thresholds. 131–132. Finish remaining Stage 1 except deploy-ops. 133. `HACKANAPP` redeemed. 134. You can start (Stage 2 pipes).
-
-### Wednesday 2 Sep — Stage 2, Joe sheet, parallel Daytona, explain-parse
-
-137. Explain Stage 2 simply. 139. Where is deterministic eval; what must Poushali do for Stage 2? (eval in bundled Python; she sets org env secrets, opens Design, republishes). 140. Where is org Environment overlay. 141–142. 3-bullet scrum, conversational. 143. What are Stage 3 & 4? 144. Secrets under user Environment, not org. 145. Why this error (pipe/deploy). 146. Check Stage 2 terminal. 147. Shashi Slack: AI slop, billing/auth, Joe submissions at scale, other companies, Friday demo timeline. 148. 30 repos would take half a day? Sequential Daytona yes — **real issue**. 149. Parallel multiple Daytona sandboxes (USP = minutes for 40–50 repos). 150. Go ahead with pool.
-
-152. Republish successful? 153. What is the app switcher? 154. Is Stage 2 complete? Not until switcher smoke. 155. Screenshot. 156. Multiple repos, **no LLM write-up**. 157. Fix robustly with guardrails. 159. Republish a pass? 160. Where is LLM write-up; is scoring correct? 161. Was latest run completely correct?
-
-### Thursday 3 Sep — Hopper, load-bearing, sharing, Stage 3
-
-162. Verdict + LLM write both correct? Hopper still low until engine harvest fix. 163. Go ahead and fix (manifest harvest + in-code pipeline). 164. Verify all repo runs in latest run. 165. Load-bearing Daytona / custom node decision now. 166. Is the real load-bearing bug fixed? (clone `project_id`; yes after v6). 167. Can I share the app for testing? `@me` / switcher for self; teammates need `@team`. 168. Publish `@team` now? Not yet. 169. Do docs require `@team`? Yes before `@public` (Stage 4), not immediately. 170–172. Slack copy for Shashi on target categories (Code/SDK, Platform, API) — more detailed Q&A structure; titles as categories in-app.
-
-173. Tracking sheet copy-paste (do **not** leave “Getting PR merged for custom nodes / Need auth + billing”).
-
-174/176. Did we mention changing the font? Shashi asked; **not shipped** as custom typeface. 177. Stage 2 completed end to end? Playbook yes; SQL/font/`@team` are other stages. 178. Staging switcher screenshot (MMM / Hopper Significant 4.5 Backbone Yes). 179. Load-bearing tag colliding with labels below — CSS fix (`Tower.tsx`, `app.css`). 180. Previous runs not on Dashboard — appState isolation, not a filter. 181. Go ahead with Stage 3. 182. Is everything in Stage 3 docs completed? Wired; probe failed. 183. App screenshot with broker banner. 184. What to ask Dmitrii. 185–186. One-line for Shashi, generic (not `ROCKETRIDE_CLIENT_ID`).
-
-### Friday 4 Sep — broker understanding + this handoff
-
-187. Pasted full Slack with Dmitrii (#2203, broker unset staging+prod). 188. Is understanding correct that org SQL hits staging shared DB via `ROCKETRIDE_DB_BROKER_URL` unset on staging & prod? **Engine** broker, not app env; data-core exists; wiring never done. 189. Until resolved, using personal Postgres? **No — `appState`.** 190. Stuck because next step is deployment? **No.** `@me` is deployed. Stuck on Stage 3 SQL checkbox. 191. What is Stage 4? Marketplace checklist + `@team`/`@public`. 192. **This file.**
+**9 Sep:** Shashi wants GitHub + Rod engg thread. Pushed `rocketride-shell`. Rod feedback list: `useExisting=true` (does not replace clone-per-worker); pipe ids as agent coding issue (we have disk drift after pins); Design preview he doesn’t understand → **loginRequest spin**, not Full Screen frame. Rod also: local SaaS **`feat/app-2`** admin setup is now `.bootstrap` JSON on **initial SaaS DB create** (multi-org); old email-list-on-login path is gone. Not used on staging Judge Hack.
 
 ---
 
-## 12. Tracking sheet (copy-paste)
+## 11. Paste-ready (keep current)
 
-```
-hack-judge	Judge Hack	Poushali	Tech	Active	Development	Stage 2 done. Published @me v10. Auth + billing declared. No custom node. Eval proven on Joe sheet + 4-sandbox Daytona. Stage 3 SQL wired but blocked: engine SQL broker unset on staging/prod (rocketride-server #2203, Dmitrii). Runs in appState. Next: broker then SQL verify; then @team.		Yes	Granted	No
-```
+**Shashi status:** Judge Hack `@me` **v11** (10 Sep). Stage 3 SQL verified then tenant DB empty on later load; hydrate/`useExisting` fix republished. Stage 4 in progress: org-scope secrets then `@team`. Not submitting `@public`.
 
----
+**Shashi GitHub:** Latest shell app: https://github.com/Poushali0202/hackathon-usage-verifier/tree/rocketride-shell/judge-hack-ui — `phase-2` is the old FastAPI app.
 
-## 13. What the next agent should not do
+**Rod Design preview (one bullet we are sure of):** Design `.rrapp` is not `@me`. Emitting `shell:loginRequest` in preview spun on Sign in required; we removed it. `@me` not prompting login is intended. Do not claim split `appState` as proven.
 
-- Do not “fix” SQL with Supabase / personal PG / `DATABASE_URL` / `storeVariant=external`.
-- Do not build `hackjudge_*` nodes.
-- Do not treat Design preview as the published app.
-- Do not claim Stage 3 complete until signed-in hydrate is green.
-- Do not restyle the 5-layer isometric tower; labels only.
-- Do not let the LLM write tag/backbone/score.
-- Do not verdict on partial clone/payload.
-- Do not publish `@team`/`@public` or commit unless the user asks.
-- Do not skip `npm.cmd run gen` before tests/publish.
+**Mith/Mansi:** Which node (`rocketride_sql` vs `db_postgres`)? Host/password set? Canvas vs published app `client.database.query`? Signed-in vs API key?
 
 ---
 
-## 14. Remaining if asked
+## 12. Next if asked
 
-1. Wait for Dmitrii: staging cloud SQL live → switcher verify banner + import + CONTRACT gate 3.
-2. Confirm leftover `ROCKETRIDE_HACKJUDGE_PG_*` removed from Environment overlay.
-3. Promote secrets to **org** scope before `@team`.
-4. Stage 4 only if asked: switcher smoke, first-run, write paths, listing, `@me`→`@team`→`@public` via review, notes to Shashi.
-5. Optional later: custom typeface (shell-token exception); live Stripe prices; deploy-ops metrics pipeline (explicitly deferred).
-6. v2 only if Daytona cannot meet production load: generic repository-evidence node (Dylan bar: not Judge-Hack-specific).
-7. Do not commit unless asked.
+1. Owner: org-scope the three pipe secrets (do not script `setEnv`).
+2. Republish `@me` (README + responsive CSS), then `publishApp @team/<name>`.
+3. Re-copy `apps/judge-hack-ui` → git `judge-hack-ui/` and push `rocketride-shell` after more edits.
+4. Optional: delete throwaway target `Stage3 SQL Probe`.
+5. Do not commit verifier `eval/` WIP unless asked.
+6. Do not `@public` / invent `price_*` / flip to personal Postgres.

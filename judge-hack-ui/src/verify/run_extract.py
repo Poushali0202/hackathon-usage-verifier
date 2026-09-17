@@ -51,6 +51,9 @@ try:
     out = extract_mod.finalize(ctx, "")
     out["schema"] = "hackjudge.extract.v1"
     out["status"] = "complete"
+    # Cap so Daytona stdout is not truncated; verification is fail-closed on this slice.
+    out["prompt"] = extract_mod.build_prompt(ctx)
+    out["corpus_lower"] = str(ctx.get("corpus_lower") or "")[:40000]
     emit(out)
 except SystemExit:
     pass

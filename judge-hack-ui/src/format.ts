@@ -1,4 +1,5 @@
 import type { StoredRun } from './types';
+import { AVG_REPO_KB, nextPlanTier, planBudgetKb, remainingKb } from './verify/meter';
 
 export function runDuration(r: StoredRun | undefined, now = Date.now()): string | null {
 	if (!r?.created_at) return null;
@@ -102,19 +103,31 @@ export function countsFromResults(results: Array<{ tag?: string; project_predate
 	};
 }
 
-const PLAN_BUDGET_KB: Record<string, number> = { developer: 4000, company: 20000, organizers: 40000 };
-
-/** Advisory allowance using a 500 KB average repo, matching the Pricing copy. */
-export function estimateAllowance(repoCount: number, plan: string) {
-	const avgKb = 500;
-	const estimated_kb = repoCount * avgKb;
-	const budget_kb = PLAN_BUDGET_KB[plan] ?? PLAN_BUDGET_KB.company;
-	if (estimated_kb <= budget_kb) return null;
-	const next = plan === 'developer' ? 'company' : 'organizers';
+/** Remaining prepaid MB vs this sheet. Null when the batch fits. */
+export function estimateAllowance(repoCount: number, plan: string, usedKb = 0) {
+	const estimated_kb = repoCount * AVG_REPO_KB;
+	const budget_kb = planBudgetKb(plan);
+	const remaining_kb = remainingKb(plan, usedKb);
+	const next_tier = nextPlanTier(plan);
+	if (remaining_kb <= 0) {
+		return {
+			estimated_kb,
+			budget_kb,
+			remaining_kb: 0,
+			used_kb: usedKb,
+			est_verified_rows: 0,
+			next_tier,
+			blocked: true,
+		};
+	}
+	if (estimated_kb <= remaining_kb) return null;
 	return {
 		estimated_kb,
 		budget_kb,
-		est_verified_rows: Math.max(1, Math.floor(budget_kb / avgKb)),
-		next_tier: next,
+		remaining_kb,
+		used_kb: usedKb,
+		est_verified_rows: Math.max(1, Math.floor(remaining_kb / AVG_REPO_KB)),
+		next_tier,
+		blocked: false,
 	};
 }

@@ -108,7 +108,9 @@ export function parseExtractResult(value: unknown): ExtractedTarget {
 		return tool as ExtractedTarget;
 	}
 	const parsed = typeof tool.output === 'string' ? parseJsonObject<ExtractedTarget>(tool.output) : null;
-	if ((tool as { truncated?: boolean }).truncated) {
+	const truncated = !!(tool as { truncated?: boolean }).truncated;
+	if (parsed && parsed.schema === 'hackjudge.extract.v1' && parsed.status === 'complete') return parsed;
+	if (truncated) {
 		return { status: 'failed', reason: 'Daytona output was truncated — no target prefill on a partial payload' };
 	}
 	if (parsed) return parsed;

@@ -2,14 +2,14 @@
   "name": "hackjudge-judge-hack",
   "version": "0.1.0",
   "private": true,
-  "description": "Fast, evidence-based verification of RocketRide usage in hackathon repositories.",
+  "description": "Fast, evidence-based verification of product usage in hackathon repositories.",
   "license": "MIT",
   "appManifest": {
     "id": "hackjudge.judge-hack",
     "publisher": "hackjudge",
     "name": "Judge Hack",
-    "description": "Fast, evidence-based verification of RocketRide usage in hackathon repositories.",
-    "icon": "./icon.svg",
+    "description": "Fast, evidence-based verification of product usage in hackathon repositories.",
+    "icon": "./icon.png",
     "readme": "./README.md",
     "categories": [
       "developer-tools",

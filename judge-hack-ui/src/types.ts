@@ -23,6 +23,7 @@ export type TargetRecord = {
 	name: string;
 	is_preset?: boolean;
 	config: Record<string, unknown>;
+	owner_user_id?: string;
 	created_by?: ActorStamp;
 	updated_by?: ActorStamp;
 	updated_at?: string;
@@ -103,6 +104,7 @@ export type VerifyResult = {
 };
 
 export type ExtractedTarget = {
+	schema?: string;
 	status?: string;
 	reason?: string;
 	repo?: string;
@@ -110,6 +112,8 @@ export type ExtractedTarget = {
 	warnings?: string[];
 	suggestions?: { competitors?: string; neutral?: string };
 	sources?: Record<string, string[]>;
+	prompt?: string;
+	corpus_lower?: string;
 };
 
 export type RunSummary = {
@@ -132,6 +136,7 @@ export type StoredRun = {
 	flagged_count: number;
 	done_count: number;
 	created_at: string;
+	owner_user_id?: string;
 	created_by?: ActorStamp;
 	updated_by?: ActorStamp;
 	updated_at?: string;
@@ -145,6 +150,7 @@ export type JudgeSettings = {
 	history_penalty: number;
 	plan: PlanTier;
 	billingStatus?: string;
+	meter_kb_used: number;
 };
 
 export type StoreStatus = {
@@ -158,6 +164,9 @@ export type StoreStatus = {
 export type Allowance = {
 	estimated_kb: number;
 	budget_kb: number;
+	remaining_kb?: number;
+	used_kb?: number;
 	est_verified_rows: number;
 	next_tier?: string;
+	blocked?: boolean;
 };

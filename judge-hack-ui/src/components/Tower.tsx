@@ -50,6 +50,12 @@ function ragState(layers: LayerMap | undefined, id: string): string {
 	return ['target', 'other', 'none'].includes(v) ? v : 'none';
 }
 
+/** Glass plate color: load-bearing target = green, other target = blue, else off. */
+export function paneTone(raw: string, load: boolean): 'core' | 'rr' | 'off' {
+	if (raw !== 'target') return 'off';
+	return load ? 'core' : 'rr';
+}
+
 /** Original 5-callout layout (spec §10.4): labels track the five plates, stay inside the scene. */
 function layoutCallouts(scene: HTMLElement | null) {
 	if (!scene) return;
@@ -138,16 +144,14 @@ export default function Tower({ layers, architecture, backbone, label = 'RocketR
 			</div>
 			<div className="scene" ref={ref}>
 				<div className="tower">
-					{stack.map((p, i) => {
-						const cls = p.raw !== 'target' ? 'off' : (p.load ? 'core' : 'rr');
-						return (
-							<div
-								key={p.id}
-								className={`pane p${i} ${cls}`}
-								data-layer={4 - i}
-							/>
-						);
-					})}
+					{stack.map((p, i) => (
+						<div
+							key={p.id}
+							className={`pane p${i} ${paneTone(p.raw, p.load)}`}
+							data-layer={4 - i}
+							data-pane={p.id}
+						/>
+					))}
 				</div>
 				<svg className="leaders" />
 				{topFirst.map((p, ci) => {

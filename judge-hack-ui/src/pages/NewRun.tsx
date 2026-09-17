@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePrefs } from 'shell';
-import { LiveHint, Page, AllowanceWarning, TierLockModal } from '../components/bits';
+import { LiveHint, Page, AllowanceModal, OrgBusyModal, TierLockModal } from '../components/bits';
 import ResultsGrid from '../components/ResultsGrid';
 import { isCompanyPlan } from '../billing';
 import { estimateAllowance, targetRubricHelp } from '../format';
 import { useNav } from '../NavContext';
 import { resolveTargetId, useRuns } from '../RunsContext';
+import { isOrgBusyReason } from '../verify/leases';
 import { submissionsFromFile } from '../verify/sheet';
 import type { Submission } from '../types';
 
@@ -42,6 +43,8 @@ export default function NewRun() {
 	const [parseErr, setParseErr] = useState('');
 	const [runId, setRunId] = useState<string | null>(null);
 	const [lockOpen, setLockOpen] = useState(false);
+	const [capOpen, setCapOpen] = useState(false);
+	const [orgBusyOpen, setOrgBusyOpen] = useState(false);
 	const fileInput = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -49,22 +52,22 @@ export default function NewRun() {
 	}, [getPref, targets]);
 
 	const run = runId ? getRun(runId) : undefined;
-	const canRun = eventDate && rows.length > 0 && run?.status !== 'running';
-	const allowance = estimateAllowance(rows.length, settings.plan);
+	const allowance = estimateAllowance(rows.length, settings.plan, settings.meter_kb_used);
+	const capKey = allowance
+		? `${allowance.blocked ? 'block' : 'trunc'}:${rows.length}:${allowance.est_verified_rows}:${settings.meter_kb_used}`
+		: '';
+	const canRun = !!(eventDate && rows.length > 0 && run?.status !== 'running' && !allowance?.blocked);
 
-	async function onFile(f: File | null) {
-		setFile(f);
-		setParseErr('');
-		setRows([]);
-		if (!f) return;
-		try {
-			setRows(await submissionsFromFile(f));
-		} catch (e) {
-			setParseErr(e instanceof Error ? e.message : String(e));
-		}
-	}
+	useEffect(() => {
+		if (step !== 2 || runId || !capKey) return;
+		setCapOpen(true);
+	}, [step, runId, capKey]);
 
-	function start() {
+	useEffect(() => {
+		if (run?.status === 'error' && isOrgBusyReason(run.error)) setOrgBusyOpen(true);
+	}, [run?.status, run?.error]);
+
+	function actuallyStart() {
 		try {
 			const id = startBatch({
 				name: name || `Run ${new Date().toLocaleDateString()}`,
@@ -74,6 +77,26 @@ export default function NewRun() {
 				targetId,
 			});
 			setRunId(id);
+		} catch (e) {
+			setParseErr(e instanceof Error ? e.message : String(e));
+		}
+	}
+
+	function start() {
+		if (allowance) {
+			setCapOpen(true);
+			return;
+		}
+		actuallyStart();
+	}
+
+	async function onFile(f: File | null) {
+		setFile(f);
+		setParseErr('');
+		setRows([]);
+		if (!f) return;
+		try {
+			setRows(await submissionsFromFile(f));
 		} catch (e) {
 			setParseErr(e instanceof Error ? e.message : String(e));
 		}
@@ -100,7 +123,6 @@ export default function NewRun() {
 					</p>
 				)}
 				{run.status === 'error' && <div className="dqline">Run failed: {run.error}</div>}
-				<AllowanceWarning a={allowance} />
 				<ResultsGrid results={run.results} total={run.total} summary={run.summary}
 					exportName={`${run.name.replace(/\s+/g, '_')}.xlsx`} />
 				{run.status !== 'running' && (
@@ -189,10 +211,19 @@ export default function NewRun() {
 					{step > 0 && <button className="btn ghost sm" type="button" onClick={() => setStep(step - 1)}>← Back</button>}
 					{step < 2 && <button className="btn sm" type="button" disabled={step === 0 && !eventDate}
 						onClick={() => setStep(step + 1)}>Continue →</button>}
-					{step === 2 && <button className="btn sm" type="button" disabled={!canRun} onClick={start}>Run verification</button>}
+					{step === 2 && <button className="btn sm" type="button" disabled={!canRun} onClick={start}>
+						{allowance?.blocked ? 'Allowance empty' : 'Run verification'}
+					</button>}
 				</div>
 				{step === 0 && !eventDate && <p className="help" style={{ textAlign: 'right' }}>Pick the event date to continue.</p>}
 			</div>
+			<AllowanceModal
+				open={capOpen && step === 2 && !runId}
+				a={allowance}
+				onClose={() => setCapOpen(false)}
+				onContinue={actuallyStart}
+			/>
+			<OrgBusyModal open={orgBusyOpen} onClose={() => setOrgBusyOpen(false)} />
 			<TierLockModal open={lockOpen} onClose={() => setLockOpen(false)} title="Git freshness & integrity is a Company feature">
 				<p>Pro verifies every project was built at your event: earliest-commit checks against the
 					event window, commit-date tamper detection, and a judge-set penalty. It&apos;s enabled in this

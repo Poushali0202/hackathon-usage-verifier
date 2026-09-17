@@ -101,7 +101,7 @@ export default function CheckoutHost() {
 		return (
 			<CheckoutModal
 				appName="Judge Hack"
-				appDescription="Fast, evidence-based verification of RocketRide usage in hackathon repositories."
+				appDescription="Fast, evidence-based verification of product usage in hackathon repositories."
 				stripePublishableKey={stripeKey}
 				onFetchPlans={fetchPlans}
 				onCreateCheckout={createCheckout}

@@ -80,6 +80,12 @@ describe('scoringSummary / flags / allowance', () => {
 		expect(a?.budget_kb).toBe(4000);
 		expect(a?.next_tier).toBe('company');
 		expect(a?.est_verified_rows).toBe(8);
+		expect(a?.blocked).toBe(false);
+	});
+	it('blocks when the prepaid remainder is empty', () => {
+		const a = estimateAllowance(1, 'developer', 4000);
+		expect(a?.blocked).toBe(true);
+		expect(a?.est_verified_rows).toBe(0);
 	});
 	it('formats run duration', () => {
 		const start = '2026-09-01T00:00:00.000Z';
