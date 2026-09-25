@@ -114,12 +114,9 @@ function ProjectDossier({ r, company, onBack }: { r: VerifyResult; company: bool
 			<div className="jh-dossier-grid">
 				<div className="jh-dossier-main">
 					{!company && !!r.event_window && (
-						<div className="lockcard" style={{ margin: '6px 0 10px' }}>
-							<h3>Company — Commit-history integrity</h3>
-							<p style={{ margin: 0 }}>Built-on dates, pre-event flags and tamper detection for this
-								project are available on the Company plan.{' '}
-								<button className="linkish" type="button" onClick={() => go('pricing', undefined, 'company')}>Upgrade →</button></p>
-						</div>
+						<p className="muted" style={{ fontSize: 13, margin: '6px 0 10px' }}>
+							Commit-history flags are included on Company and Organizers.
+						</p>
 					)}
 					{company && (r.project_predates || tampered(r)) && (
 						<div className="dqline">

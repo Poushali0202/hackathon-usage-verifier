@@ -55,26 +55,10 @@ export function Page({
 
 export function StoreBanner() {
 	const { store } = useRuns();
-	if (!store.ready && !store.error) {
-		return <p className="muted" style={{ fontSize: 12.5, margin: '0 0 14px' }}>Connecting to staging SQL…</p>;
-	}
-	if (store.kind === 'sql') {
-		return (
-			<p className="muted" style={{ fontSize: 12.5, margin: '0 0 14px' }}>
-				Runs live in staging-managed SQL{store.imported ? ` · imported ${store.imported} workspace row(s)` : ''},
-				scoped to your signed-in user. Other judges in this org do not see your runs.
-				Verification runs on RocketRide&apos;s engine and reads each repository through
-				the GitHub API with your own token — nothing is cloned or written to disk.
-				Developer runs use up to 2 evaluators at once, Company/Organizers up to 3, within
-				a shared workspace pool of 5 so overlapping judges wait instead of overflowing.
-			</p>
-		);
-	}
+	if (store.kind === 'sql' || (!store.ready && !store.error)) return null;
 	return (
 		<div className="notice" style={{ marginBottom: 14 }}>
-			{store.broker
-				? 'Staging SQL did not get a signed-in cloud identity (broker). Runs stay in this workspace until that is enabled. Personal Postgres is not used.'
-				: `Staging SQL is not available yet (${store.error || 'not connected'}). Runs stay in this workspace.`}
+			Runs are saved in this workspace only until storage reconnects.
 		</div>
 	);
 }
@@ -86,13 +70,10 @@ export function GithubTokenNotice({ action = 'Runs' }: { action?: string }) {
 	if (githubTokenReady !== false) return null;
 	return (
 		<div className="notice" style={{ marginBottom: 14 }}>
-			{githubTokenError ? (
-				<><b>GitHub token could not be read.</b> {githubTokenError} Retry under{' '}</>
-			) : (
-				<><b>GitHub token needed.</b> {action} read every repository through the GitHub API with
-				your own personal access token, so none is shared and rate limits are yours. Add one under{' '}</>
-			)}
-			<button className="linkish" type="button" onClick={() => go('settings')}>Settings → GitHub access</button>.
+			{githubTokenError
+				? <><b>GitHub token could not be read.</b> {githubTokenError} Retry in{' '}</>
+				: <><b>GitHub token required.</b> {action} need your personal access token. Add it in{' '}</>}
+			<button className="linkish" type="button" onClick={() => go('settings')}>Settings</button>.
 		</div>
 	);
 }
@@ -102,12 +83,7 @@ export function LiveHint() {
 		<div className="livecall">
 			<span className="livedot" />
 			<div style={{ flex: 1 }}>
-				<b style={{ fontSize: 13.5 }}>Verdicts stream in <span className="livetxt">LIVE</span></b>
-				<div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
-					Each project's verdict lands the moment it's verified — Developer uses up to
-					2 evaluators at once, Company and Organizers up to 3, within a shared
-					org pool of 5, so a large sheet fills in minutes, not hours.
-				</div>
+				<b style={{ fontSize: 13.5 }}>Results appear as each repository finishes</b>
 				<div className="liveticks"><i /><i /><i /><i /><i /><i /></div>
 			</div>
 		</div>

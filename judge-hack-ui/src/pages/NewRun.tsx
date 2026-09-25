@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePrefs } from 'shell';
-import { GithubTokenNotice, LiveHint, Page, AllowanceModal, OrgBusyModal, TierLockModal } from '../components/bits';
+import { GithubTokenNotice, LiveHint, Page, AllowanceModal, OrgBusyModal } from '../components/bits';
 import ResultsGrid from '../components/ResultsGrid';
 import { isCompanyPlan } from '../billing';
 import { BILLING_LIVE } from '../entitlement';
@@ -32,7 +32,7 @@ export default function NewRun() {
 	const { settings, startBatch, stop, getRun, targets } = useRuns();
 	const { getPref } = usePrefs();
 	const { go } = useNav();
-	const isCompany = isCompanyPlan(settings.plan);
+	const canTuneHistory = !BILLING_LIVE || isCompanyPlan(settings.plan);
 	const [step, setStep] = useState(0);
 	const [name, setName] = useState('');
 	const [eventDate, setEventDate] = useState('');
@@ -43,7 +43,6 @@ export default function NewRun() {
 	const [drag, setDrag] = useState(false);
 	const [parseErr, setParseErr] = useState('');
 	const [runId, setRunId] = useState<string | null>(null);
-	const [lockOpen, setLockOpen] = useState(false);
 	const [capOpen, setCapOpen] = useState(false);
 	const [orgBusyOpen, setOrgBusyOpen] = useState(false);
 	const fileInput = useRef<HTMLInputElement>(null);
@@ -155,21 +154,15 @@ export default function NewRun() {
 								<div className="help">Commit-history checks measure against this date ± {settings.grace_days} grace days.</div>
 							</div>
 							<div className="field">
-								<label>Pre-event work penalty (pts){!isCompany ? ' · Company plan' : ''}</label>
-								<input type="number" min={0} step={0.5} value={penalty} disabled={!isCompany}
+								<label>Pre-event work penalty (pts)</label>
+								<input type="number" min={0} step={0.5} value={penalty} disabled={!canTuneHistory}
 									onChange={(e) => setPenalty(Number(e.target.value))} />
-								<div className="help">{isCompany
-									? "Deducted when a project's history predates the event window. 0 = flag only."
-									: 'The Company plan controls how hard pre-event work is penalized.'}</div>
+								<div className="help">
+									{canTuneHistory
+										? 'Deducted when history predates the event window. 0 = flag only.'
+										: 'Included on Company and Organizers.'}
+								</div>
 							</div>
-						</div>
-						<div className="lockcard">
-							<h3>Company — Git freshness &amp; integrity checks</h3>
-							<p>Flag projects built before your event, detect commit-date rewrites, and set the
-								penalty judges apply. {isCompany ? <b>Enabled on your plan.</b> : <b>Locked on Developer.</b>}</p>
-							<button className="btn gold sm" type="button" onClick={() => setLockOpen(true)}>
-								{isCompany ? 'About Company →' : 'Unlock with Company →'}
-							</button>
 						</div>
 					</>
 				)}
@@ -226,11 +219,6 @@ export default function NewRun() {
 				onContinue={actuallyStart}
 			/>
 			<OrgBusyModal open={orgBusyOpen} onClose={() => setOrgBusyOpen(false)} />
-			<TierLockModal open={lockOpen} onClose={() => setLockOpen(false)} title="Git freshness & integrity is a Company feature">
-				<p>Pro verifies every project was built at your event: earliest-commit checks against the
-					event window, commit-date tamper detection, and a judge-set penalty. It&apos;s enabled in this
-					preview so you can evaluate it.</p>
-			</TierLockModal>
 		</Page>
 	);
 }

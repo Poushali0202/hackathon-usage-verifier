@@ -71,9 +71,9 @@ export function scoringSummary(r: {
 
 export function targetRubricHelp(target: { name?: string; is_preset?: boolean } | undefined): string {
 	if (!target || target.is_preset) {
-		return 'RocketRide pipeline rubric: .pipe files, agent/LLM nodes, and whether RocketRide is the AI backbone. Data platforms such as LaserData or Butterbase need a custom target.';
+		return 'Scores committed pipelines, agent and LLM nodes, and whether RocketRide is the backbone. Use a custom target for other products.';
 	}
-	return `${target.name} uses SDK & platform signals (install, call-sites, API usage, artifacts, deploy). Company and Organizers can change that target’s point scale; Developer uses the team defaults.`;
+	return `${target.name} scores SDK install, call sites, API usage, artifacts, and deploy evidence.`;
 }
 
 export function isFlagged(r: { project_predates?: unknown; history_tampered?: unknown[]; reused_pipelines?: unknown[] }): boolean {

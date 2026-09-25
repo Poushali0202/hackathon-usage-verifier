@@ -9,7 +9,6 @@ import {
 	clearGithubToken,
 	formatGithubTokenAudit,
 	GITHUB_TOKEN_AUDIT_PREF,
-	GITHUB_TOKEN_KEY,
 	looksLikeGithubToken,
 	parseGithubTokenAudit,
 	probeGithubToken,
@@ -89,12 +88,8 @@ function GithubAccessCard() {
 				<p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>{formatGithubTokenAudit(audit)}</p>
 			)}
 			<p className="muted" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
-				Each judge must paste their own GitHub personal access token here. There is no shared
-				or org-provided token. This box stays empty after save — we never show the secret again.
-				It is stored as <code>{GITHUB_TOKEN_KEY}</code> in <i>your</i> RocketRide environment
-				(Account → Environment, user scope only). Runs, prefill, and target tests use that value
-				and fail closed if it is missing. A fine-grained token with read-only <b>Contents</b> and
-				<b>Metadata</b> on public repositories is enough; add private repos if submissions are private.
+				Required to read submission repositories. Saved to your account only — this box stays
+				empty after save. A fine-grained token with read-only Contents and Metadata is enough.
 			</p>
 			<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
 				<input
@@ -147,50 +142,33 @@ export default function Settings() {
 						<span className="avatar">{(name || 'P')[0]}</span>
 						<div>
 							<b>{name}</b>
-							<div className="muted" style={{ fontSize: 12.5 }}>
-								RocketRide identity · {user?.email || 'signed in'}
-								{user?.userId ? ` · ${user.userId.slice(0, 8)}` : ''}
-							</div>
+							<div className="muted" style={{ fontSize: 12.5 }}>{user?.email || 'Signed in'}</div>
 						</div>
 					</div>
 				</div>
 
 				<GithubAccessCard />
 
-				<div className="glass" style={{ padding: 20 }}>
-					<div className="section-kicker" style={{ marginBottom: 10 }}>Other credentials</div>
-					<p className="notice" style={{ margin: 0 }}>
-						The explanation model (Anthropic) is provided by Judge Hack from the RocketRide
-						environment (<code>ROCKETRIDE_ANTHROPIC_KEY</code>); it never sees a repository and
-						never writes a score. You do not bring a sandbox or compute key — verification runs
-						on the RocketRide engine.
-					</p>
-				</div>
-
-				<div className="glass" style={{ padding: 20 }}>
-					<div className="section-kicker" style={{ marginBottom: 10 }}>Plan</div>
-					<p style={{ margin: '0 0 8px' }}>
-						<b>{BILLING_LIVE ? planLabel : 'Testing — billing paused'}</b>
-						{BILLING_LIVE && settings.billingStatus ? (
-							<span className="muted"> · {settings.billingStatus.replace(/_/g, ' ')}</span>
-						) : (
-							<span className="muted"> · checkout and plan caps are off</span>
-						)}
-					</p>
-					<p className="muted" style={{ fontSize: 12, margin: 0 }}>
-						{BILLING_LIVE
-							? `Included allowance ${formatDataKb(budget)} · used ${formatDataKb(settings.meter_kb_used)} · remaining ${formatDataKb(left)}. `
-							: 'Plan meters are not enforced while we test. '}
-						Each run verifies up to {workers} repositor{workers === 1 ? 'y' : 'ies'} at
-						once on the RocketRide engine. The workspace shares a pool of 5 concurrent evaluators;
-						if it is full, a modal asks you to retry — the rest of the app stays usable.
-					</p>
-					<div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-						{BILLING_LIVE && <button className="btn sm" type="button" onClick={() => openCheckout()}>Subscribe / checkout</button>}
-						<button className="btn ghost sm" type="button" onClick={() => go('pricing')}>See plans →</button>
-						<button className="btn ghost sm" type="button" onClick={() => openAccount()}>Account overlay</button>
+				{BILLING_LIVE && (
+					<div className="glass" style={{ padding: 20 }}>
+						<div className="section-kicker" style={{ marginBottom: 10 }}>Plan</div>
+						<p style={{ margin: '0 0 8px' }}>
+							<b>{planLabel}</b>
+							{settings.billingStatus ? (
+								<span className="muted"> · {settings.billingStatus.replace(/_/g, ' ')}</span>
+							) : null}
+						</p>
+						<p className="muted" style={{ fontSize: 12, margin: 0 }}>
+							Included {formatDataKb(budget)} · {formatDataKb(left)} remaining.
+							Up to {workers} repositor{workers === 1 ? 'y' : 'ies'} at a time.
+						</p>
+						<div style={{ display: 'flex', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+							<button className="btn sm" type="button" onClick={() => openCheckout()}>Subscribe / checkout</button>
+							<button className="btn ghost sm" type="button" onClick={() => go('pricing')}>See plans →</button>
+							<button className="btn ghost sm" type="button" onClick={() => openAccount()}>Account</button>
+						</div>
 					</div>
-				</div>
+				)}
 
 				<div className="glass" style={{ padding: 20 }}>
 					<div className="section-kicker" style={{ marginBottom: 10 }}>Run defaults</div>
@@ -207,8 +185,7 @@ export default function Settings() {
 						</div>
 					</div>
 					<p className="muted" style={{ fontSize: 12 }}>
-						These are app settings (<code>hackjudge.judge-hack.graceDays</code> /
-						<code>historyPenalty</code>) and also appear in the shell Settings overlay.
+						Used as the starting values on New run and Quick verify.
 					</p>
 					<button className="btn sm" type="button" onClick={save}>{saved ? 'Saved' : 'Save defaults'}</button>
 				</div>

@@ -63,7 +63,7 @@ const SidebarNav: React.FC<{ view: View; onView: (view: View, _run?: string, hig
 			))}
 			<span className="grow" />
 			<SidebarCollapsedGate>
-				{BILLING_LIVE ? (
+				{BILLING_LIVE && (
 					<div className="upgrade">
 						<b>Upgrade your plan</b> <img className="astro" src={astronaut} alt="" /><br />
 						Git freshness checks and custom scoring.<br />
@@ -71,11 +71,6 @@ const SidebarNav: React.FC<{ view: View; onView: (view: View, _run?: string, hig
 							onClick={() => openCheckout()}>Subscribe →</button>
 						<button className="btn ghost sm" type="button" style={{ marginTop: 8 }}
 							onClick={() => onView('pricing', undefined, 'company')}>See plans →</button>
-					</div>
-				) : (
-					<div className="upgrade">
-						<b>Testing — billing paused</b> <img className="astro" src={astronaut} alt="" /><br />
-						Checkout and plan caps are off so judges can run the app. Sign-in is still RocketRide.
 					</div>
 				)}
 			</SidebarCollapsedGate>

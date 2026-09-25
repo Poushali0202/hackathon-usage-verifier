@@ -37,13 +37,13 @@ export default function Dashboard() {
 						<div className="muted" style={{ fontSize: 12.5 }}>
 							{user.email}
 							{BILLING_LIVE
-								? ` · ${planLabel} plan${settings.billingStatus ? ` · ${settings.billingStatus.replace(/_/g, ' ')}` : ''} · ${formatDataKb(remainingKb(settings.plan, settings.meter_kb_used))} of ${formatDataKb(planBudgetKb(settings.plan))} left`
-								: ' · billing paused — all features open for testing'}
+								? ` · ${planLabel}${settings.billingStatus ? ` · ${settings.billingStatus.replace(/_/g, ' ')}` : ''} · ${formatDataKb(remainingKb(settings.plan, settings.meter_kb_used))} of ${formatDataKb(planBudgetKb(settings.plan))} left`
+								: ''}
 						</div>
 					</div>
 					<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
 						{BILLING_LIVE && <button className="btn sm" type="button" onClick={() => openCheckout()}>Subscribe</button>}
-						<button className="btn ghost sm" type="button" onClick={() => go('pricing')}>Plans</button>
+						{BILLING_LIVE && <button className="btn ghost sm" type="button" onClick={() => go('pricing')}>Plans</button>}
 						<button className="btn ghost sm" type="button" onClick={() => openAccount()}>Account</button>
 					</div>
 				</div>

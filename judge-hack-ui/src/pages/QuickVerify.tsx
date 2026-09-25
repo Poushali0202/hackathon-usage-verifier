@@ -34,7 +34,7 @@ export default function QuickVerify() {
 		? `${allowance.blocked ? 'block' : 'trunc'}:${repos.length}:${allowance.est_verified_rows}:${settings.meter_kb_used}`
 		: '';
 	const valid = repos.length > 0 && !!eventDate && run?.status !== 'running' && !allowance?.blocked;
-	const isCompany = isCompanyPlan(settings.plan);
+	const canTuneHistory = !BILLING_LIVE || isCompanyPlan(settings.plan);
 
 	useEffect(() => {
 		if (!capKey || run?.status === 'running') return;
@@ -101,8 +101,8 @@ export default function QuickVerify() {
 						<input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
 					</div>
 					<div className="field">
-						<label>Pre-event penalty (pts){!isCompany ? ' · Company plan' : ''}</label>
-						<input type="number" min={0} step={0.5} value={penalty} disabled={!isCompany}
+						<label>Pre-event penalty (pts)</label>
+						<input type="number" min={0} step={0.5} value={penalty} disabled={!canTuneHistory}
 							onChange={(e) => setPenalty(Number(e.target.value))} />
 					</div>
 				</div>
