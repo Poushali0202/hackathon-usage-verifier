@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { usePrefs, useShellConnection } from 'shell';
 import { isCompanyPlan } from '../billing';
-import { Page, TagPill, TierLockModal, OrgBusyModal } from '../components/bits';
+import { GithubTokenNotice, Page, TagPill, TierLockModal, OrgBusyModal } from '../components/bits';
 import { ROCKETRIDE_PRESET, useRuns } from '../RunsContext';
 import type { ExtractedTarget, TargetRecord, VerifyResult } from '../types';
+import { requireGithubToken, type EnvClient } from '../verify/githubToken';
 import { extractTarget, testTargetRepo, type VerifyClient } from '../verify/session';
 import { isOrgBusyError } from '../verify/leases';
 import {
@@ -100,7 +101,6 @@ const EXTRACT_KEYS = [
 
 const MAX_UPLOADS = 8;
 const MAX_UPLOAD_CHARS = 250_000;
-const GITHUB_REPO = /^https?:\/\/github\.com\/[^/\s]+\/[^/\s#?]+/i;
 
 async function readUploads(files: File[]): Promise<Record<string, string>> {
 	const out: Record<string, string> = {};
@@ -131,8 +131,6 @@ export default function Targets() {
 	const [tBusy, setTBusy] = useState(false);
 	const [tRes, setTRes] = useState<(VerifyResult & { error?: string }) | null>(null);
 	const [orgBusyOpen, setOrgBusyOpen] = useState(false);
-	const typedPrefill = useRef(false);
-	const lastAutoUrl = useRef('');
 
 	const sel = draft || targets.find((t) => t.id === selId) || targets[0];
 	const form: Record<string, unknown> = {
@@ -241,8 +239,6 @@ export default function Targets() {
 				architecture: ARCHITECTURE_TEMPLATES.sdk.panes,
 			},
 		};
-		typedPrefill.current = false;
-		lastAutoUrl.current = '';
 		setDraft(created);
 		setSelId(id);
 		setTab('code');
@@ -257,8 +253,6 @@ export default function Targets() {
 
 	function loadLaserdataExample() {
 		const existing = targets.find((t) => t.id === 'laserdata' || t.name.trim().toLowerCase() === 'laserdata');
-		typedPrefill.current = false;
-		lastAutoUrl.current = '';
 		setXInfo(null);
 		setTRes(null);
 		setTab('code');
@@ -285,8 +279,6 @@ export default function Targets() {
 	}
 
 	function pick(t: TargetRecord) {
-		typedPrefill.current = false;
-		lastAutoUrl.current = '';
 		setDraft(null);
 		setSelId(t.id);
 		setMsg('');
@@ -330,12 +322,13 @@ export default function Targets() {
 		setXBusy(true); setXInfo(null); setMsg('');
 		try {
 			const uploads = files.length ? await readUploads(files) : undefined;
+			const githubToken = await requireGithubToken(client as unknown as EnvClient);
 			const res = await extractTarget(client as VerifyClient, {
 				githubUrl: xUrl.trim() || undefined,
 				docsUrl: xDocs.trim() || undefined,
 				pkg: xPkg.trim() || undefined,
 				uploads,
-			}, makeOrgLease('prefill'));
+			}, githubToken, makeOrgLease('prefill'));
 			if (res.status && res.status !== 'complete') {
 				setMsg(res.reason || 'Extract did not return a config.');
 				setXInfo(res);
@@ -376,20 +369,6 @@ export default function Targets() {
 		setXBusy(false);
 	}
 
-	const prefillRef = useRef(prefill);
-	prefillRef.current = prefill;
-
-	useEffect(() => {
-		if (!typedPrefill.current || readOnly || !isConnected) return;
-		const url = xUrl.trim();
-		if (!GITHUB_REPO.test(url) || lastAutoUrl.current === url) return;
-		const t = window.setTimeout(() => {
-			lastAutoUrl.current = url;
-			void prefillRef.current();
-		}, 800);
-		return () => window.clearTimeout(t);
-	}, [xUrl, isConnected, readOnly]);
-
 	const hasSuggestion = (field: string, value: string) =>
 		String(form[field] || '').split(',').map((s) => s.trim().toLowerCase()).includes(value.toLowerCase());
 
@@ -410,10 +389,11 @@ export default function Targets() {
 		setTBusy(true); setTRes(null);
 		try {
 			const current = draft || sel;
+			const githubToken = await requireGithubToken(client as unknown as EnvClient);
 			const res = await testTargetRepo(client as VerifyClient, url, {
 				name: current.name || 'Target',
 				config: scoringConfigForPlan({ types: ['code'], ...current.config }, settings.plan),
-			}, makeOrgLease('test'));
+			}, githubToken, makeOrgLease('test'));
 			setTRes(res);
 		} catch (e) {
 			if (isOrgBusyError(e)) {
@@ -451,6 +431,7 @@ export default function Targets() {
 				Name the product teams are judged on. You describe how they use it;
 				Judge Hack scores that against a fixed rubric. Custom targets live in this workspace.
 			</p>
+			<GithubTokenNotice action="Prefill and repository tests" />
 			<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, maxWidth: 820 }}>
 				{targets.map((t) => (
 					<button key={t.id} type="button"
@@ -468,13 +449,13 @@ export default function Targets() {
 						<div style={{ flex: 1 }}>
 							<b style={{ fontSize: 13.5 }}>Start from the product’s public surface</b>
 							<div className="help" style={{ marginTop: 2 }}>
-								Paste a GitHub repo and we fill what we can verify. Docs, a package name, or
-								attached files help. Review before you save.
+								Paste a GitHub repo, optional docs URL, package name, or files, then click
+								Fill from sources. Filling never starts until you click — so you can complete every field first.
 							</div>
 							<div className="jh-extract-grid">
 								<input className="xin" type="text" placeholder="https://github.com/vendor/product"
 									value={xUrl}
-									onChange={(e) => { typedPrefill.current = true; setXUrl(e.target.value); }} />
+									onChange={(e) => setXUrl(e.target.value)} />
 								<input className="xin" type="text" placeholder="Docs URL (optional)"
 									value={xDocs} onChange={(e) => setXDocs(e.target.value)} />
 								<input className="xin" type="text" placeholder="Package name (optional)"
@@ -486,9 +467,7 @@ export default function Targets() {
 											accept=".json,.toml,.md,.txt,.yaml,.yml,.example,.sample,.py,.ts,.js,.env"
 											onChange={(e) => {
 												const files = e.target.files ? [...e.target.files] : [];
-												typedPrefill.current = true;
 												setXFiles(files);
-												if (files.length && isConnected && !readOnly) void prefill(files);
 											}} />
 									</label>
 									<button className="btn sm" type="button" style={{ flex: 1 }}
@@ -745,7 +724,7 @@ export default function Targets() {
 						<div className="section-kicker">Test on a sample repo</div>
 						<div className="help" style={{ marginTop: 0, marginBottom: 8 }}>
 							Paste a repo you know used this product. If the checks fire, the definition works.
-							Runs inside the RocketRide Daytona sandbox.
+							Reads the repository through the GitHub API with your token — nothing is cloned.
 						</div>
 						<div style={{ display: 'flex', gap: 8 }}>
 							<input className="xin" style={{ flex: 1 }} type="text"

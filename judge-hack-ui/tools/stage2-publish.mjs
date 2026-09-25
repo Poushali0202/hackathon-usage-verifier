@@ -28,17 +28,17 @@ const REQUIRED_PROVIDERS = [
 	'agent_rocketride',
 	'llm_anthropic',
 	'memory_internal',
-	'tool_daytona',
+	'tool_python',
+	'tool_http_request',
 	'response_answers',
 	'rocketride_sql',
 ];
+/** Org-scope secrets the pipes reference. The GitHub token is per judge (user scope) and is not listed. */
 const PIPE_SECRETS = [
-	'ROCKETRIDE_DAYTONA_KEY',
 	'ROCKETRIDE_ANTHROPIC_KEY',
-	'ROCKETRIDE_GITHUB_TOKEN',
 ];
 const PIPE_FILES = [
-	'hackjudge_daytona_v1.pipe',
+	'hackjudge_python_v1.pipe',
 	'hackjudge_explain_v1.pipe',
 	'hackjudge_sql_v1.pipe',
 ];
@@ -282,7 +282,7 @@ try {
 			console.log(`verifyApp ok files=${report.fileCount} bytes=${report.uncompressedBytes}`);
 			const added = await deploy.deploy.addApp(appRoot, {
 				workspaceRoot,
-				comment: 'v21: switcher icon PNG so the launcher tile is not the fallback glyph',
+				comment: 'tool_python + tool_http_request replay: no Daytona, no clone, per-judge GitHub token',
 				onProgress: (line) => console.log(line),
 			});
 			const versionHint = added.artifact?.version ?? added.artifact?.registryVersion;
@@ -290,6 +290,15 @@ try {
 			const latest = await pollBuild(deploy, versionHint);
 			const published = await deploy.publishApp(APP_ID, latest.registryVersion, '@me');
 			console.log(`publishApp @me v${latest.registryVersion}`, published?.publish ? 'ok' : '');
+			try {
+				const pins = await deploy.whereApp(APP_ID);
+				console.log('whereApp:');
+				for (const row of pins || []) {
+					console.log(`  ${row.rung}\t${row.handle}\tv${row.version}\t${row.state}`);
+				}
+			} catch (err) {
+				console.log('whereApp:', err instanceof Error ? err.message : err);
+			}
 		}
 	}
 

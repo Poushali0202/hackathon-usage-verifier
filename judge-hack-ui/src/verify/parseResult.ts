@@ -1,5 +1,8 @@
 import type { ExtractedTarget, VerifyResult } from '../types';
 
+export const VERIFY_SCHEMA = 'hackjudge.python.v1';
+export const EXTRACT_SCHEMA = 'hackjudge.extract.v1';
+
 function parseJsonObject<T extends object>(value: string): T | null {
 	const text = String(value || '');
 	const tryParse = (s: string): T | null => {
@@ -27,100 +30,104 @@ function parseJsonObject<T extends object>(value: string): T | null {
 	return tryParse(text.slice(start, end + 1));
 }
 
-/** Unwrap Daytona `{output,error,exit_code}` into the evaluator JSON. */
-export function parseDaytonaResult(value: unknown): VerifyResult {
+type PythonShape = {
+	stdout?: string;
+	stderr?: string;
+	exit_code?: number;
+	timed_out?: boolean;
+	result?: unknown;
+	schema?: string;
+	status?: string;
+};
+
+function lastLine(text: string): string {
+	const lines = String(text || '').trim().split('\n').map((l) => l.trim()).filter(Boolean);
+	return lines.length ? lines[lines.length - 1].slice(0, 400) : '';
+}
+
+/** Why tool_python returned no evaluator object. */
+function executionFailure(tool: PythonShape): string {
+	if (tool.timed_out) return 'Evaluator timed out on the RocketRide engine — no verdict on a partial run';
+	const err = lastLine(tool.stderr || '');
+	if (err) return `Evaluator error: ${err}`;
+	if (tool.exit_code) return `Evaluator exited with code ${tool.exit_code}`;
+	return 'Evaluator returned no JSON verdict';
+}
+
+function withoutVerdict(parsed: VerifyResult, reason: string): VerifyResult {
+	return {
+		...parsed,
+		status: 'fetch_incomplete',
+		reason,
+		tag: undefined,
+		backbone: undefined,
+		score: undefined,
+		breakdown: undefined,
+		pipelines: undefined,
+	};
+}
+
+/** Unwrap tool_python `{result, stdout, stderr, exit_code, timed_out}` into the evaluator JSON. */
+export function parsePythonResult(value: unknown): VerifyResult {
 	if (typeof value === 'string') {
 		return parseJsonObject<VerifyResult>(value) ?? { status: 'invalid', reason: value };
 	}
 	if (!value || typeof value !== 'object') {
-		return { status: 'invalid', reason: 'Empty Daytona response' };
+		return { status: 'invalid', reason: 'Empty evaluator response' };
 	}
-	const tool = value as {
-		error?: string;
-		output?: string;
-		exit_code?: number;
-		truncated?: boolean;
-		schema?: string;
-		status?: string;
-	};
-	if (tool.schema === 'hackjudge.daytona.v1' || (tool.status && !('output' in tool) && !('exit_code' in tool))) {
+	const tool = value as PythonShape;
+	if (tool.schema === VERIFY_SCHEMA || (tool.status && !('stdout' in tool) && !('exit_code' in tool) && !('result' in tool))) {
 		return tool as VerifyResult;
 	}
-	const parsed = typeof tool.output === 'string' ? parseJsonObject<VerifyResult>(tool.output) : null;
-	if (tool.truncated) {
-		return {
-			status: 'fetch_incomplete',
-			reason: 'Daytona output was truncated — no verdict on a partial payload',
-			truncated: true,
-			...(parsed && parsed.status && parsed.status !== 'complete' ? parsed : {}),
-			tag: undefined,
-			backbone: undefined,
-			score: undefined,
-			breakdown: undefined,
-			pipelines: undefined,
-		};
+	let parsed: VerifyResult | null = null;
+	if (tool.result && typeof tool.result === 'object') {
+		parsed = tool.result as VerifyResult;
+	} else if (typeof tool.result === 'string') {
+		parsed = parseJsonObject<VerifyResult>(tool.result);
 	}
-	if (parsed) {
+	if (!parsed && typeof tool.stdout === 'string') {
+		parsed = parseJsonObject<VerifyResult>(tool.stdout);
+	}
+	if (tool.timed_out) {
+		return { status: 'unverifiable', reason: executionFailure(tool), output: tool.stderr || tool.stdout };
+	}
+	if (parsed && parsed.status) {
 		if (parsed.truncated) {
-			return {
-				...parsed,
-				status: 'fetch_incomplete',
-				reason: String(parsed.reason || 'Evaluator payload was truncated — no verdict on partial retrieval'),
-				tag: undefined,
-				backbone: undefined,
-				score: undefined,
-				breakdown: undefined,
-				pipelines: undefined,
-			};
+			return withoutVerdict(parsed, String(parsed.reason || 'Evaluator payload was truncated — no verdict on partial retrieval'));
 		}
 		return parsed;
 	}
-	if (tool.error) {
-		return { status: 'unverifiable', reason: `Daytona sandbox error: ${tool.error}`, output: tool.output };
-	}
-	const exitReason = tool.exit_code === 127
-		? 'Daytona sandbox has no Python interpreter (exit 127)'
-		: (tool.exit_code ? `Daytona exit ${tool.exit_code}` : 'Daytona returned no JSON verdict');
 	return {
 		status: 'unverifiable',
-		reason: exitReason,
-		output: tool.output ?? JSON.stringify(value),
+		reason: executionFailure(tool),
+		output: tool.stderr || tool.stdout || JSON.stringify(value),
 	};
 }
 
-/** Unwrap Daytona output into extract.finalize JSON. */
+/** Unwrap tool_python output into extract.finalize JSON. */
 export function parseExtractResult(value: unknown): ExtractedTarget {
 	if (typeof value === 'string') {
 		return parseJsonObject<ExtractedTarget>(value) ?? { status: 'failed', reason: value };
 	}
 	if (!value || typeof value !== 'object') {
-		return { status: 'failed', reason: 'Empty Daytona response' };
+		return { status: 'failed', reason: 'Empty evaluator response' };
 	}
-	const tool = value as {
-		error?: string;
-		output?: string;
-		exit_code?: number;
-		schema?: string;
-		status?: string;
-		reason?: string;
-	};
-	if (tool.schema === 'hackjudge.extract.v1' || (tool.status && !('output' in tool) && !('exit_code' in tool))) {
+	const tool = value as PythonShape & { reason?: string };
+	if (tool.schema === EXTRACT_SCHEMA || (tool.status && !('stdout' in tool) && !('exit_code' in tool) && !('result' in tool))) {
 		return tool as ExtractedTarget;
 	}
-	const parsed = typeof tool.output === 'string' ? parseJsonObject<ExtractedTarget>(tool.output) : null;
-	const truncated = !!(tool as { truncated?: boolean }).truncated;
-	if (parsed && parsed.schema === 'hackjudge.extract.v1' && parsed.status === 'complete') return parsed;
-	if (truncated) {
-		return { status: 'failed', reason: 'Daytona output was truncated — no target prefill on a partial payload' };
+	let parsed: ExtractedTarget | null = null;
+	if (tool.result && typeof tool.result === 'object') {
+		parsed = tool.result as ExtractedTarget;
+	} else if (typeof tool.result === 'string') {
+		parsed = parseJsonObject<ExtractedTarget>(tool.result);
 	}
-	if (parsed) return parsed;
-	if (tool.error) {
-		return { status: 'failed', reason: `Daytona sandbox error: ${tool.error}` };
+	if (!parsed && typeof tool.stdout === 'string') {
+		parsed = parseJsonObject<ExtractedTarget>(tool.stdout);
 	}
-	return {
-		status: 'failed',
-		reason: tool.exit_code === 127
-			? 'Daytona sandbox has no Python interpreter (exit 127)'
-			: (tool.exit_code ? `Daytona exit ${tool.exit_code}` : 'Daytona returned no extract JSON'),
-	};
+	if (tool.timed_out) {
+		return { status: 'failed', reason: executionFailure(tool) };
+	}
+	if (parsed && parsed.status) return parsed;
+	return { status: 'failed', reason: executionFailure(tool) };
 }

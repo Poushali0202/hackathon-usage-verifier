@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { usePrefs } from 'shell';
-import { LiveHint, Page, AllowanceModal, OrgBusyModal, TierLockModal } from '../components/bits';
+import { GithubTokenNotice, LiveHint, Page, AllowanceModal, OrgBusyModal, TierLockModal } from '../components/bits';
 import ResultsGrid from '../components/ResultsGrid';
 import { isCompanyPlan } from '../billing';
+import { BILLING_LIVE } from '../entitlement';
 import { estimateAllowance, targetRubricHelp } from '../format';
 import { useNav } from '../NavContext';
 import { resolveTargetId, useRuns } from '../RunsContext';
@@ -52,7 +53,7 @@ export default function NewRun() {
 	}, [getPref, targets]);
 
 	const run = runId ? getRun(runId) : undefined;
-	const allowance = estimateAllowance(rows.length, settings.plan, settings.meter_kb_used);
+	const allowance = BILLING_LIVE ? estimateAllowance(rows.length, settings.plan, settings.meter_kb_used) : null;
 	const capKey = allowance
 		? `${allowance.blocked ? 'block' : 'trunc'}:${rows.length}:${allowance.est_verified_rows}:${settings.meter_kb_used}`
 		: '';
@@ -138,6 +139,7 @@ export default function NewRun() {
 	return (
 		<Page title="New run" narrow>
 			<Stepper step={step} />
+			<GithubTokenNotice />
 			<div className="glass" style={{ padding: 24 }}>
 				{step === 0 && (
 					<>

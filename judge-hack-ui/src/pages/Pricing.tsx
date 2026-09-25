@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { openCheckout } from '../billing';
+import { BILLING_LIVE } from '../entitlement';
 import { Page } from '../components/bits';
 import { useNav } from '../NavContext';
 import { useRuns } from '../RunsContext';
@@ -52,11 +53,21 @@ export default function Pricing() {
 	return (
 		<Page title="Plans">
 			<p className="muted" style={{ textAlign: 'center', margin: '-8px 0 30px' }}>
-				Every plan includes a prepaid verification allowance that meters down in real
-				time and stops at zero — you can never spend more than you&apos;ve paid.
-				Checkout is the RocketRide billing modal (Stripe). Current entitlement:{' '}
-				<b>{current[0].toUpperCase() + current.slice(1)}</b>
-				{settings.billingStatus ? ` (${settings.billingStatus})` : ''}.
+				{BILLING_LIVE ? (
+					<>
+						Every plan includes a prepaid verification allowance that meters down in real
+						time and stops at zero — you can never spend more than you&apos;ve paid.
+						Checkout is the RocketRide billing modal (Stripe). Current entitlement:{' '}
+						<b>{current[0].toUpperCase() + current.slice(1)}</b>
+						{settings.billingStatus ? ` (${settings.billingStatus})` : ''}.
+					</>
+				) : (
+					<>
+						These are the planned tiers. Checkout and plan caps are paused while we test
+						— Josh: staging billing is not wired yet. Testers get every feature. Flip
+						<code> BILLING_LIVE </code> when Store prices and the webhook exist.
+					</>
+				)}
 			</p>
 			<div className="plans">
 				{TIERS.map(([name, price, included, who, feats, mid]) => (
@@ -77,8 +88,11 @@ export default function Pricing() {
 						</ul>
 						<button className={`btn sm ${mid ? 'gold' : 'ghost'}`} type="button"
 							style={{ marginTop: 16 }}
+							disabled={!BILLING_LIVE}
 							onClick={() => openCheckout(name.toLowerCase() as PlanTier)}>
-							{current === name.toLowerCase() ? 'Manage billing →' : `Subscribe ${name} →`}
+							{BILLING_LIVE
+								? (current === name.toLowerCase() ? 'Manage billing →' : `Subscribe ${name} →`)
+								: 'Checkout paused'}
 						</button>
 					</div>
 				))}
@@ -97,8 +111,9 @@ export default function Pricing() {
 					Each run is refused once the included allowance is empty, and a sheet that would
 					overshoot is truncated to what still fits. Stripe auto-recharge is not wired yet —
 					plans go live when a version is approved on the Store tab. Do not invent price IDs.
-					Daytona compute is included; Developer uses 2 sandboxes, Company/Organizers 3,
-					shared across the workspace up to 5 live boxes.
+					Compute is included: verification runs on the RocketRide engine over the GitHub API
+					with your own token; Developer verifies 2 repositories at once, Company/Organizers 3,
+					shared across the workspace up to 5.
 				</p>
 			</div>
 		</Page>

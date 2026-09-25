@@ -1,45 +1,71 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeResult } from '../src/verify/normalize';
-import { parseDaytonaResult, parseExtractResult } from '../src/verify/parseResult';
+import { parsePythonResult, parseExtractResult } from '../src/verify/parseResult';
 
-describe('parseDaytonaResult fail-closed', () => {
-	it('does not invent a verdict on truncated output', () => {
-		const r = parseDaytonaResult({
-			truncated: true,
-			output: JSON.stringify({ status: 'complete', tag: 'Significant', score: 9, backbone: 'Yes' }),
+describe('parsePythonResult fail-closed', () => {
+	it('does not invent a verdict on a truncated evaluator payload', () => {
+		const r = parsePythonResult({
+			stdout: '',
+			stderr: '',
+			exit_code: 0,
+			timed_out: false,
+			result: { schema: 'hackjudge.python.v1', status: 'complete', truncated: true, tag: 'Significant', score: 9, backbone: 'Yes' },
 		});
 		expect(r.status).toBe('fetch_incomplete');
 		expect(r.tag).toBeUndefined();
 		expect(r.score).toBeUndefined();
 		expect(r.backbone).toBeUndefined();
 	});
-	it('surfaces sandbox errors without a fake tag', () => {
-		const r = parseDaytonaResult({ error: 'timeout', exit_code: 1 });
+	it('surfaces evaluator errors without a fake tag', () => {
+		const r = parsePythonResult({ stdout: '', stderr: 'Traceback...\nNameError: name x is not defined', exit_code: 1, timed_out: false, result: null });
 		expect(r.status).toBe('unverifiable');
-		expect(r.reason).toMatch(/Daytona sandbox error/);
+		expect(r.reason).toMatch(/Evaluator error: NameError/);
+		expect(r.tag).toBeUndefined();
+	});
+	it('surfaces timeouts without a fake tag', () => {
+		const r = parsePythonResult({ stdout: '', stderr: '', exit_code: -1, timed_out: true, result: null });
+		expect(r.status).toBe('unverifiable');
+		expect(r.reason).toMatch(/timed out/i);
 		expect(r.tag).toBeUndefined();
 	});
 	it('keeps a complete evaluator payload', () => {
-		const r = parseDaytonaResult({
-			output: JSON.stringify({ schema: 'hackjudge.daytona.v1', status: 'complete', tag: 'Moderate', score: 2.5, backbone: 'Partial' }),
+		const r = parsePythonResult({
+			stdout: '',
+			stderr: '',
+			exit_code: 0,
+			timed_out: false,
+			result: { schema: 'hackjudge.python.v1', status: 'complete', tag: 'Moderate', score: 2.5, backbone: 'Partial' },
 		});
 		expect(r.status).toBe('complete');
 		expect(r.tag).toBe('Moderate');
 		expect(r.score).toBe(2.5);
 	});
+	it('accepts a bare evaluator object', () => {
+		const r = parsePythonResult({ schema: 'hackjudge.python.v1', status: 'fetch_incomplete', reason: 'GitHub recursive tree was truncated' });
+		expect(r.status).toBe('fetch_incomplete');
+	});
 });
 
 describe('parseExtractResult fail-closed', () => {
-	it('fails closed on truncated extract output', () => {
-		const r = parseExtractResult({ truncated: true, output: '{}' });
+	it('fails closed when the evaluator produced no object', () => {
+		const r = parseExtractResult({ stdout: '', stderr: 'SyntaxError: bad', exit_code: 1, timed_out: false, result: null });
 		expect(r.status).toBe('failed');
-		expect(r.reason).toMatch(/truncated/);
+		expect(r.reason).toMatch(/SyntaxError/);
+	});
+	it('fails closed on timeout', () => {
+		const r = parseExtractResult({ stdout: '', stderr: '', exit_code: -1, timed_out: true, result: null });
+		expect(r.status).toBe('failed');
+		expect(r.reason).toMatch(/timed out/i);
+	});
+	it('keeps a complete extract payload', () => {
+		const r = parseExtractResult({ result: { schema: 'hackjudge.extract.v1', status: 'complete', config: {} } });
+		expect(r.status).toBe('complete');
 	});
 });
 
 describe('normalizeResult fail-closed', () => {
 	const row = { project: 'Demo', github: 'https://github.com/acme/demo' };
-	it('strips tag/score/backbone when the sandbox did not finish', () => {
+	it('strips tag/score/backbone when the evaluator did not finish', () => {
 		const r = normalizeResult({
 			status: 'fetch_incomplete',
 			tag: 'Significant',

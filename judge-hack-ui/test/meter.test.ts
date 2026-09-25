@@ -19,19 +19,34 @@ describe('plan budgets', () => {
 });
 
 describe('resultMetersKb', () => {
-	it('does not bill rows that never occupied a sandbox', () => {
+	it('does not bill rows whose evaluation never started', () => {
 		expect(resultMetersKb({ status: 'unverifiable', reason: 'Run stopped before this repo started' })).toBe(0);
-		expect(resultMetersKb({ status: 'unverifiable', reason: 'No Daytona sandbox was available' })).toBe(0);
+		expect(resultMetersKb({ status: 'unverifiable', reason: 'No evaluator worker was available' })).toBe(0);
 		expect(resultMetersKb({
 			status: 'unverifiable',
-			reason: 'Daytona sandbox error: Total CPU limit exceeded. Maximum allowed: 10.',
+			reason: 'Evaluator error: Pipeline is already running',
+		})).toBe(0);
+		expect(resultMetersKb({
+			status: 'unverifiable',
+			reason: 'GitHub token missing — add your personal access token in Settings → GitHub access',
+		})).toBe(0);
+		expect(resultMetersKb({
+			status: 'unverifiable',
+			reason: 'Could not read your RocketRide environment — no verdict without confirming your GitHub token',
 		})).toBe(0);
 		expect(resultMetersKb({
 			status: 'unverifiable',
 			reason: 'Included compute is busy. Retry in a moment.',
 		})).toBe(0);
 	});
-	it('bills a completed (or failed-after-clone) row at the average repo size', () => {
+	it('does not bill evaluator crashes or missing GitHub repos', () => {
+		expect(resultMetersKb({
+			status: 'unverifiable',
+			reason: 'TypeError: gather() takes from 2 to 4 positional arguments but 5 were given',
+		})).toBe(0);
+		expect(resultMetersKb({ status: 'unverifiable', reason: 'GitHub returned HTTP 404' })).toBe(0);
+	});
+	it('bills a completed (or failed-after-fetch) row at the average repo size', () => {
 		expect(resultMetersKb({ status: 'complete', tag: 'Significant' })).toBe(AVG_REPO_KB);
 		expect(resultMetersKb({ status: 'unverifiable', reason: 'repo inaccessible' })).toBe(AVG_REPO_KB);
 	});

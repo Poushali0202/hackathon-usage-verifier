@@ -63,10 +63,10 @@ export function StoreBanner() {
 			<p className="muted" style={{ fontSize: 12.5, margin: '0 0 14px' }}>
 				Runs live in staging-managed SQL{store.imported ? ` · imported ${store.imported} workspace row(s)` : ''},
 				scoped to your signed-in user. Other judges in this org do not see your runs.
-				Daytona compute is included with the subscription — Developer runs use up to 2
-				sandboxes, Company/Organizers up to 3, torn down when the run ends. The workspace
-				shares a hard cap of 5 live sandboxes (Daytona&apos;s 10 vCPU starter tier) so
-				overlapping judges wait instead of overflowing.
+				Verification runs on RocketRide&apos;s engine and reads each repository through
+				the GitHub API with your own token — nothing is cloned or written to disk.
+				Developer runs use up to 2 evaluators at once, Company/Organizers up to 3, within
+				a shared workspace pool of 5 so overlapping judges wait instead of overflowing.
 			</p>
 		);
 	}
@@ -79,6 +79,24 @@ export function StoreBanner() {
 	);
 }
 
+/** Shown wherever a run can start while the judge has no GitHub token stored. */
+export function GithubTokenNotice({ action = 'Runs' }: { action?: string }) {
+	const { githubTokenReady, githubTokenError } = useRuns();
+	const { go } = useNav();
+	if (githubTokenReady !== false) return null;
+	return (
+		<div className="notice" style={{ marginBottom: 14 }}>
+			{githubTokenError ? (
+				<><b>GitHub token could not be read.</b> {githubTokenError} Retry under{' '}</>
+			) : (
+				<><b>GitHub token needed.</b> {action} read every repository through the GitHub API with
+				your own personal access token, so none is shared and rate limits are yours. Add one under{' '}</>
+			)}
+			<button className="linkish" type="button" onClick={() => go('settings')}>Settings → GitHub access</button>.
+		</div>
+	);
+}
+
 export function LiveHint() {
 	return (
 		<div className="livecall">
@@ -87,7 +105,7 @@ export function LiveHint() {
 				<b style={{ fontSize: 13.5 }}>Verdicts stream in <span className="livetxt">LIVE</span></b>
 				<div className="muted" style={{ fontSize: 12.5, marginTop: 2 }}>
 					Each project's verdict lands the moment it's verified — Developer uses up to
-					2 Daytona sandboxes at once, Company and Organizers up to 3, within a shared
+					2 evaluators at once, Company and Organizers up to 3, within a shared
 					org pool of 5, so a large sheet fills in minutes, not hours.
 				</div>
 				<div className="liveticks"><i /><i /><i /><i /><i /><i /></div>
@@ -140,7 +158,7 @@ export function OrgBusyModal({
 				<div className="modal glass" role="dialog" aria-modal="true" aria-labelledby="jh-org-busy-title">
 					<h3 id="jh-org-busy-title">Included compute is busy</h3>
 					<p>
-						Other judges in this workspace are using the included Daytona sandboxes
+						Other judges in this workspace are using the included evaluator pool
 						right now. Your sheet and settings are unchanged — retry in a moment.
 						This is not a plan lock; the rest of Judge Hack stays available.
 					</p>

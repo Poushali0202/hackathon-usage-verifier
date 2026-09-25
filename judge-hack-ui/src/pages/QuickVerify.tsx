@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { usePrefs } from 'shell';
-import { Page, AllowanceModal, OrgBusyModal } from '../components/bits';
+import { Page, AllowanceModal, GithubTokenNotice, OrgBusyModal } from '../components/bits';
 import ResultsGrid from '../components/ResultsGrid';
 import { isCompanyPlan } from '../billing';
+import { BILLING_LIVE } from '../entitlement';
 import { estimateAllowance, targetRubricHelp } from '../format';
 import { useNav } from '../NavContext';
 import { resolveTargetId, useRuns } from '../RunsContext';
@@ -28,7 +29,7 @@ export default function QuickVerify() {
 
 	const repos = urlsFromText(urls);
 	const run = runs.find((r) => r.id === activeId);
-	const allowance = estimateAllowance(repos.length, settings.plan, settings.meter_kb_used);
+	const allowance = BILLING_LIVE ? estimateAllowance(repos.length, settings.plan, settings.meter_kb_used) : null;
 	const capKey = allowance
 		? `${allowance.blocked ? 'block' : 'trunc'}:${repos.length}:${allowance.est_verified_rows}:${settings.meter_kb_used}`
 		: '';
@@ -77,6 +78,7 @@ export default function QuickVerify() {
 				Judging a whole event? Use <button className="linkish" type="button" onClick={() => go('newrun')}>New run</button> with your
 				submissions sheet.
 			</p>
+			<GithubTokenNotice action="Verifications" />
 			<div className="glass" style={{ padding: 24 }}>
 				<div className="field">
 					<label>GitHub repository URL(s) <span className="muted">(one per line)</span></label>

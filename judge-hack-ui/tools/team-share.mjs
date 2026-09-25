@@ -17,10 +17,9 @@ const require = createRequire(path.join(appRoot, 'package.json'));
 const { RocketRideClient } = require('rocketride');
 
 const APP_ID = 'hackjudge.judge-hack';
+/** Org/team-scope secrets the pipes reference. Each judge's GitHub token is user scope and not shared. */
 const PIPE_SECRETS = [
-	'ROCKETRIDE_DAYTONA_KEY',
 	'ROCKETRIDE_ANTHROPIC_KEY',
-	'ROCKETRIDE_GITHUB_TOKEN',
 ];
 const publish = process.argv.includes('--publish');
 const publishOnly = process.argv.includes('--publish-only');
@@ -167,7 +166,7 @@ try {
 	}
 
 	if (!overlayOk) {
-		throw new Error('Refuse @team: org/team overlay is missing Daytona/Anthropic/GitHub keys. Owner must set them in Account → Environment (do not use setEnv from this script).');
+		throw new Error('Refuse @team: org/team overlay is missing the Anthropic key. Owner must set it in Account → Environment (do not use setEnv from this script).');
 	}
 	if (!latest?.registryVersion) throw new Error('No app registry version to publish');
 	if (!shareTeam?.id) throw new Error('No team to publish to');

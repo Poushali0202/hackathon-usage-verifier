@@ -13,6 +13,7 @@ import {
 	onCheckoutRequest,
 	openAccount,
 } from './billing';
+import { BILLING_LIVE } from './entitlement';
 import { useNav } from './NavContext';
 import { useJudgeTheme } from './theme';
 import type { PlanTier } from './types';
@@ -46,6 +47,7 @@ export default function CheckoutHost() {
 	const billingClient = client as BillingClient | null;
 
 	useEffect(() => onCheckoutRequest((plan) => {
+		if (!BILLING_LIVE) return;
 		setPicked(plan);
 		setLoadError(null);
 		setLivePlans([]);

@@ -1,26 +1,20 @@
 import type { PlanTier } from '../types';
 
 /**
- * We provide Daytona on the org key. Isolation is per-plan sandbox caps plus
- * an org-wide SQL lease (DAYTONA_ORG_SLOTS) plus tear-down — not BYOC, not an
- * occupancy lock. Daytona itself has been observed to allow more than 5 live
- * boxes on this org key, so the app enforces the 10 vCPU / 5-box wall.
+ * Evaluations run as tool_python calls on the shared RocketRide engine, one
+ * repo at a time per worker task. Isolation is per-plan worker caps plus an
+ * org-wide SQL lease (ORG_SLOTS) so overlapping judges queue instead of
+ * saturating the engine and GitHub rate limits.
  */
-export const DAYTONA_VCPU_PER_SANDBOX = 2;
-export const DAYTONA_TIER1_VCPU = 10;
-export const DAYTONA_ORG_SLOTS = Math.floor(DAYTONA_TIER1_VCPU / DAYTONA_VCPU_PER_SANDBOX);
-export const DAYTONA_WORKERS_DEFAULT = 2;
-export const DAYTONA_WORKERS_COMPANY = 3;
-
-export function isDaytonaCpuLimit(message: string): boolean {
-	return /cpu limit exceeded|concurrency limits|maximum allowed:\s*\d+|app\.daytona\.io\/dashboard\/limits/i.test(message || '');
-}
+export const ORG_SLOTS = 5;
+export const WORKERS_DEFAULT = 2;
+export const WORKERS_COMPANY = 3;
 
 export function planWorkerCap(plan?: PlanTier): number {
-	return (plan === 'company' || plan === 'organizers') ? DAYTONA_WORKERS_COMPANY : DAYTONA_WORKERS_DEFAULT;
+	return (plan === 'company' || plan === 'organizers') ? WORKERS_COMPANY : WORKERS_DEFAULT;
 }
 
-export function daytonaWorkerCount(
+export function workerCount(
 	repoCount: number,
 	plan?: PlanTier,
 	override?: number,
@@ -39,8 +33,8 @@ export function daytonaWorkerCount(
 	return Math.max(1, Math.min(cap, repoCount));
 }
 
-/** TTL is leftover insurance if terminate fails. Keep it tight on the 10 vCPU pool. */
-export function sandboxTtlSeconds(repoCount: number, workers: number): number {
+/** Task-token TTL is leftover insurance if terminate fails. */
+export function workerTtlSeconds(repoCount: number, workers: number): number {
 	const w = Math.max(1, workers);
 	return Math.max(240, Math.ceil(Math.max(0, repoCount) / w) * 180 + 120);
 }
@@ -48,12 +42,12 @@ export function sandboxTtlSeconds(repoCount: number, workers: number): number {
 /**
  * Task tokens are keyed by project_id + source. Two client.use() calls with the
  * same pipe identity return "Pipeline is already running" — the pool would
- * silently drop to one sandbox. Give each worker a fresh project_id.
+ * silently drop to one worker. Give each worker a fresh project_id.
  */
-export function clonePipelineForSandbox<T extends { project_id?: string }>(pipeline: T): T {
+export function clonePipelineForWorker<T extends { project_id?: string }>(pipeline: T): T {
 	const copy = JSON.parse(JSON.stringify(pipeline)) as T;
 	copy.project_id = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
 		? crypto.randomUUID()
-		: `hj-sandbox-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+		: `hj-worker-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	return copy;
 }

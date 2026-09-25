@@ -1,5 +1,5 @@
 /**
- * Live two-session Verify. Gated so `npm test` does not hit Daytona.
+ * Live two-session Verify. Gated so `npm test` does not hit the engine.
  *
  *   $env:HJ_LIVE_TWO_STORE='1'; npx vitest run test/task1-two-store-live.e2e.test.ts
  */
@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { runRepos, type VerifyClient } from '../src/verify/session';
-import { isDaytonaCpuLimit, planWorkerCap } from '../src/verify/pool';
+import { planWorkerCap } from '../src/verify/pool';
 import type { PlanTier, Submission } from '../src/types';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -106,7 +106,6 @@ function wrap(raw: InstanceType<typeof RocketRideClient>, label: string, tracker
 				return started;
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);
-				if (isDaytonaCpuLimit(message)) tracker.denyCpu();
 				throw err;
 			}
 		},
@@ -133,6 +132,7 @@ async function sessionVerify(
 		eventDate: '2026-09-16',
 		historyPenalty: 2,
 		runName: `store-${label}`,
+		githubToken: process.env.ROCKETRIDE_GITHUB_TOKEN || '',
 		plan,
 		signal,
 		onStage: (s) => stages.push(s),
@@ -199,8 +199,8 @@ describe.skipIf(process.env.HJ_LIVE_TWO_STORE !== '1')('two Store-session live V
 
 		try {
 			const fit = await overlap('developer', 2, 'company', 3);
-			expect(fit.a.stages.some((s) => s.includes('Starting 2 Daytona'))).toBe(true);
-			expect(fit.b.stages.some((s) => s.includes('Starting 3 Daytona'))).toBe(true);
+			expect(fit.a.stages.some((s) => s.includes('Starting 2 evaluators'))).toBe(true);
+			expect(fit.b.stages.some((s) => s.includes('Starting 3 evaluators'))).toBe(true);
 			expect(fit.aBoots).toBeLessThanOrEqual(2);
 			expect(fit.bBoots).toBeLessThanOrEqual(3);
 			expect(fit.a.results).toHaveLength(2);

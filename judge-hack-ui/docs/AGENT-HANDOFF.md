@@ -10,6 +10,21 @@ Do **not** treat this file as permission to commit, push, publish `@team`/`@publ
 
 ---
 
+## 00. Update (23 Sep 2026) — Daytona and git clone retired
+
+Everything below that says "Daytona", "sandbox", or "clone" is history. Current runtime:
+
+- **Runtime:** catalog `tool_python` (`hackjudge_python_v1.pipe`, pin `3f6b9d2e-5c41-4a8f-9e07-6d2b8c1a4f53`, node `python_1`, `allowedModules: urllib, html`, `timeout 900`). The evaluator runs in-process on the engine under RestrictedPython. No sandbox, no subprocess, no disk. `tool_daytona`, `ROCKETRIDE_DAYTONA_KEY`, and `hackjudge_daytona_v1.pipe` are gone.
+- **Fetch:** GitHub REST (`/repos`, recursive `git/trees` fail-closed on `truncated`, `/languages`, `/commits?until=`) + `raw.githubusercontent.com`, all through `restricted_shim.make_gh(token)`. This is the fix for Rod's clone concern.
+- **Token (Josh/Shashi concern #2):** each judge stores their own PAT as `ROCKETRIDE_GITHUB_TOKEN` in **user** scope from Settings → GitHub access (`src/verify/githubToken.ts`: `getEnv('user')` → merge → `setEnv('user')`, same op as the shell's Environment page; validated with `GET /user` first). `RunsContext` reads it at run start with `getEnv('user')` and `session.ts` passes it as a Python string literal in the `code` input. Missing token ⇒ `GITHUB_TOKEN_MISSING_REASON`, run/prefill/test fail closed, `GithubTokenNotice` links to Settings. Not metered.
+- **Bundle:** `tools/build_restricted_bundle.py` (AST transform of `eval/target.py`, `engine.py`, `extract.py` + `src/verify/restricted_shim.py` + `restricted_drivers.py`) → `src/verify/generated/evaluatorBundle.ts` `RESTRICTED_BUNDLE`. `npm run gen` needs a local Python 3. SoT edits for RestrictedPython (`acc[0]` instead of `nonlocal`, no `+=` on subscripts, no `str.format`, no star-tuples) are semantically identical; `eval` tests pass.
+- **Result shape:** `{stdout, stderr, exit_code, timed_out, result}`; `parsePythonResult` reads `result` (schema `hackjudge.python.v1`), fails closed on `timed_out`/stderr. Removed `isDaytonaCpuLimit` and the retry-to-1 path.
+- **Pool:** `pool.ts` → `workerCount`, `workerTtlSeconds`, `clonePipelineForWorker`, `ORG_SLOTS=5` (still SQL-leased).
+- **Deploy:** `stage2-publish.mjs` PIPE_FILES `hackjudge_python_v1.pipe`; PIPE_SECRETS only `ROCKETRIDE_ANTHROPIC_KEY`. Python pipe must be deployed (`npm run stage2` without `--skip-pipes`) before the next `@me`.
+- **Open:** confirm on staging that `tool_python` can reach `api.github.com` (local parity via the real `sandbox.py` passed; egress on the engine itself is unverified until the first live run).
+
+---
+
 ## 0. Snapshot (10 Sep 2026)
 
 | Item | Value |

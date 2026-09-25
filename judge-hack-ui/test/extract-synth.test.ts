@@ -36,4 +36,22 @@ describe('mergeExtractConfig', () => {
 		expect(usedLlm).toBe(false);
 		expect(config.name).toBe('Hotdata');
 	});
+	it('drops badge names, domains, and README prose', () => {
+		const { config } = mergeExtractConfig(
+			{ name: 'Cognee', dependency_names: 'cognee', invocation: 'import cognee', cli_verbs: 'cognee-cli demo' },
+			{
+				name: 'TIER 1',
+				invocation: 'cognee.ai | cognee.svg | import cognee | Cognee turns documents into',
+				cli_verbs: 'Cognee에 텍스트 추가, Cognee turns documents into, cognee-cli demo',
+			},
+			'tier 1 cognee.ai cognee.svg import cognee turns documents into demo cognee-cli',
+		);
+		expect(config.name).toBe('Cognee');
+		expect(String(config.invocation)).toContain('import cognee');
+		expect(String(config.invocation)).not.toContain('cognee.ai');
+		expect(String(config.invocation)).not.toContain('cognee.svg');
+		expect(String(config.cli_verbs)).toContain('cognee-cli demo');
+		expect(String(config.cli_verbs)).not.toContain('turns documents');
+		expect(String(config.cli_verbs)).not.toContain('텍스트');
+	});
 });

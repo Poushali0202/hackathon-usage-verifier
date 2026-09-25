@@ -3,7 +3,7 @@
     {
       "id": "chat_1",
       "provider": "chat",
-      "name": "SQL Source",
+      "name": "Repository URL",
       "config": {
         "hideForm": true,
         "mode": "Source",
@@ -14,10 +14,10 @@
     {
       "id": "agent_1",
       "provider": "agent_rocketride",
-      "name": "SQL Tool Host",
+      "name": "V1 Evaluator Host",
       "config": {
         "instructions": [
-          "You are only here so the SQL node can be invoked as a tool. Do not answer the user. Do not call any tool. Do not invent SQL or JSON. If you receive a chat message, reply with exactly: WAITING_FOR_TOOL"
+          "You are only here so the Python evaluator can be invoked as a tool. Do not answer the user. Do not call any tool. Do not invent JSON. If you receive a chat message, reply with exactly: WAITING_FOR_TOOL"
         ],
         "max_waves": 1,
         "parameters": {}
@@ -44,10 +44,6 @@
         {
           "classType": "llm",
           "from": "agent_1"
-        },
-        {
-          "classType": "llm",
-          "from": "sql_1"
         }
       ]
     },
@@ -66,29 +62,47 @@
       ]
     },
     {
-      "id": "sql_1",
-      "provider": "db_postgres",
-      "name": "Judge Hack SQL",
+      "id": "python_1",
+      "provider": "tool_python",
+      "name": "Evaluator (Python)",
       "config": {
-        "profile": "default",
-        "default": {
-          "allow_execute": true,
-          "host": "${ROCKETRIDE_HACKJUDGE_PG_HOST}",
-          "user": "${ROCKETRIDE_HACKJUDGE_PG_USER}",
-          "password": "${ROCKETRIDE_HACKJUDGE_PG_PASSWORD}",
-          "database": "${ROCKETRIDE_HACKJUDGE_PG_DATABASE}",
-          "table": "hj_runs",
-          "db_description": "Judge Hack runs and custom targets. Deterministic app SQL via execute; the LLM does not invent schema or rows.",
-          "max_attempts": 1
-        },
-        "parameters": {}
+        "type": "tool_python",
+        "serverName": "python",
+        "timeout": 900,
+        "allowedModules": [
+          {
+            "moduleName": "urllib"
+          },
+          {
+            "moduleName": "html"
+          }
+        ]
       },
-      "input": [
+      "control": [
         {
-          "lane": "questions",
-          "from": "chat_1"
+          "classType": "tool",
+          "from": "agent_1"
         }
-      ],
+      ]
+    },
+    {
+      "id": "http_1",
+      "provider": "tool_http_request",
+      "name": "GitHub fetch (GET only)",
+      "config": {
+        "type": "tool_http_request",
+        "serverName": "http",
+        "allowGET": true,
+        "allowPOST": false,
+        "allowPUT": false,
+        "allowPATCH": false,
+        "allowDELETE": false,
+        "allowHEAD": false,
+        "allowOPTIONS": false,
+        "rateLimitPerSecond": 20,
+        "rateLimitPerMinute": 900,
+        "maxConcurrentRequests": 8
+      },
       "control": [
         {
           "classType": "tool",
@@ -99,7 +113,7 @@
     {
       "id": "response_1",
       "provider": "response_answers",
-      "name": "Return SQL",
+      "name": "Return Verification",
       "config": {
         "laneName": "answers"
       },
@@ -111,11 +125,11 @@
       ]
     }
   ],
-  "name": "Judge Hack SQL V1 (external)",
-  "description": "Transitional db_postgres fallback. Same node id sql_1. Do not deploy unless the rocketride_sql broker probe fails.",
+  "name": "Judge Hack Python V1",
+  "description": "RocketRide-hosted repository verification: deterministic in-process Python evaluation per repository over the GitHub API (fetched via tool_http_request with the judge's own token). No sandbox, no clone.",
   "source": "chat_1",
   "isLocked": false,
-  "project_id": "c5d9e2b8-1a47-4f06-8d3c-9b7e0a4f2c18",
+  "project_id": "3f6b9d2e-5c41-4a8f-9e07-6d2b8c1a4f53",
   "viewport": {
     "x": 0,
     "y": 0,

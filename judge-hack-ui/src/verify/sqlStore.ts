@@ -1,6 +1,6 @@
 import type { PipelineConfig } from 'rocketride';
 import type { StoredRun, TargetRecord, VerifyResult } from '../types';
-import { clonePipelineForSandbox, DAYTONA_ORG_SLOTS } from './pool';
+import { clonePipelineForWorker, ORG_SLOTS } from './pool';
 import {
 	MAX_SQL_RUNS,
 	RUN_META_COLUMNS,
@@ -22,7 +22,6 @@ import {
 	shouldRepairRun,
 } from './sqlSchema';
 import sqlDefault from '../pipelines/hackjudge_sql_v1.pipe';
-import sqlExternal from '../pipelines/hackjudge_sql_v1.external.pipe';
 
 export { SQL_NODE_ID, shouldImportAppState, pickStoreRows, mergeRuns, mergeTargets, shouldRepairRun };
 
@@ -48,9 +47,8 @@ export type SqlClient = {
 	}) => Promise<unknown>;
 };
 
-function pipelineFor(variant: StoreVariant): PipelineConfig {
-	const raw = variant === 'external' ? sqlExternal : sqlDefault;
-	return clonePipelineForSandbox(raw as unknown as PipelineConfig);
+function pipelineFor(_variant: StoreVariant): PipelineConfig {
+	return clonePipelineForWorker(sqlDefault as unknown as PipelineConfig);
 }
 
 function isBrokerError(message: string): boolean {
@@ -351,7 +349,7 @@ export async function openSqlStore(
 					ORDER BY s
 					LIMIT 1
 					RETURNING slot`,
-					[owner || 'anon', label, expires, DAYTONA_ORG_SLOTS],
+					[owner || 'anon', label, expires, ORG_SLOTS],
 				);
 				try {
 					const res = await insert();

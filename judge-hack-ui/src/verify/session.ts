@@ -1,31 +1,32 @@
 import { Question } from 'rocketride';
 import type { PipelineConfig } from 'rocketride';
 import type { ExtractedTarget, PlanTier, Submission, VerifyResult } from '../types';
-import {
-	runExtractInSandbox,
-	runVerifyInSandbox,
-	toolExec,
-	uploadEvaluatorBundle,
-} from './daytonaInvoke';
+import { runExtractInPython, runVerifyInPython, VERIFY_TIMEOUT_MS } from './pythonInvoke';
 import { explainPipeline, explainVerdict, mergeProse } from './explain';
 import type { ExtractSources } from './extractRunner';
 import { mergeExtractConfig, parseExtractLlmJson } from './extractSynth';
 import { normalizeResult } from './normalize';
-import { parseDaytonaResult, parseExtractResult } from './parseResult';
-import daytonaPipeline from '../pipelines/hackjudge_daytona_v1.pipe';
-import { daytonaWorkerCount, clonePipelineForSandbox, isDaytonaCpuLimit, sandboxTtlSeconds } from './pool';
+import { parsePythonResult, parseExtractResult } from './parseResult';
+import pythonPipeline from '../pipelines/hackjudge_python_v1.pipe';
+import { workerCount, clonePipelineForWorker, workerTtlSeconds } from './pool';
+import { GITHUB_TOKEN_MISSING_REASON } from './githubToken';
 import { OrgBusyError, ORG_BUSY_REASON, type OrgLease } from './leases';
 
 export {
-	daytonaWorkerCount,
-	DAYTONA_WORKERS_COMPANY,
-	DAYTONA_WORKERS_DEFAULT,
-	isDaytonaCpuLimit,
-	sandboxTtlSeconds,
+	workerCount,
+	WORKERS_COMPANY,
+	WORKERS_DEFAULT,
+	workerTtlSeconds,
 } from './pool';
 export { OrgBusyError, ORG_BUSY_REASON, isOrgBusyError, isOrgBusyReason } from './leases';
 
-const pipeline = daytonaPipeline as unknown as PipelineConfig;
+export { GITHUB_ENV_READ_REASON, GITHUB_TOKEN_MISSING_REASON } from './githubToken';
+
+export function isGithubTokenMissing(reason?: string): boolean {
+	return /github token missing/i.test(String(reason || ''));
+}
+
+const pipeline = pythonPipeline as unknown as PipelineConfig;
 
 /** Structural client so shell and rocketride SDK types both satisfy the call. */
 export type VerifyClient = {
@@ -47,6 +48,8 @@ export type BatchOpts = {
 	eventDate: string;
 	historyPenalty: number;
 	runName: string;
+	/** The judge's own GitHub PAT; every GitHub read in the run uses it. */
+	githubToken: string;
 	customTarget?: { name: string; config: Record<string, unknown> };
 	plan?: PlanTier;
 	concurrency?: number;
@@ -65,27 +68,17 @@ function asErrorMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
-function sandboxLost(parsed: VerifyResult, toolResult: unknown): boolean {
-	const reason = String(parsed.reason || '');
-	if (/daytona sandbox error/i.test(reason)) return true;
-	if (parsed.status === 'invalid') return true;
-	const tool = toolExec(toolResult);
-	if (typeof tool.error === 'string' && tool.error.trim()) return true;
-	if (tool.exit_code === 127) return true;
-	return false;
+/** Transport-level failure (task token gone, engine restarted) rather than an evaluator verdict. */
+function workerLost(parsed: VerifyResult): boolean {
+	return parsed.status === 'invalid';
 }
 
 function withTarget(row: Submission, customTarget?: BatchOpts['customTarget']): Submission {
 	return { ...row, target_name: customTarget?.name || row.target_name || 'RocketRide' };
 }
 
-/** Task tokens are keyed by project_id+source. Clone per sandbox or worker 2+ hits "Pipeline is already running." */
-function pipelineForSandbox(): PipelineConfig {
-	return clonePipelineForSandbox(pipeline);
-}
-
-async function openDaytona(client: VerifyClient, name: string, ttl: number): Promise<string> {
-	const started = await client.use({ pipeline: pipelineForSandbox(), name, ttl });
+async function openWorker(client: VerifyClient, name: string, ttl: number): Promise<string> {
+	const started = await client.use({ pipeline: clonePipelineForWorker(pipeline), name, ttl });
 	return started.token;
 }
 
@@ -112,13 +105,13 @@ function chatPayload(resp: unknown): unknown {
 	return resp;
 }
 
-/** Explain pipe (no Daytona CPU) turns extract.prompt into verified field values. */
+/** Explain pipe turns extract.prompt into verified field values. */
 async function synthesizeExtract(client: VerifyClient, draft: ExtractedTarget): Promise<ExtractedTarget> {
 	const prompt = String(draft.prompt || '').trim();
 	const corpus = String(draft.corpus_lower || '');
 	if (!prompt) return { ...draft, prompt: undefined, corpus_lower: undefined };
 	const explained = await client.use({
-		pipeline: clonePipelineForSandbox(explainPipeline),
+		pipeline: clonePipelineForWorker(explainPipeline),
 		name: 'Judge Hack target extract · synthesize',
 		ttl: 300,
 	});
@@ -164,21 +157,15 @@ async function synthesizeExtract(client: VerifyClient, draft: ExtractedTarget): 
 	}
 }
 
-async function prepareSandbox(client: VerifyClient, token: string, onStage?: (stage: string) => void): Promise<void> {
-	onStage?.('Uploading evaluator into Daytona…');
-	await uploadEvaluatorBundle(client, token);
-}
-
 /**
- * Pool of Daytona sandboxes (one repo at a time per sandbox). Explain still
- * waits until every Daytona token is terminated — a second pipeline used to
- * kill the sandbox when both ran at once.
+ * Pool of evaluator workers (one tool_python task token each, one repo at a
+ * time). Explain waits until every worker token is terminated.
  */
 export async function runRepos(opts: BatchOpts): Promise<VerifyResult[]> {
-	const { client, repos, eventDate, historyPenalty, runName, customTarget, plan, concurrency, orgLease, signal, onStart, onStage, onResult } = opts;
+	const { client, repos, eventDate, historyPenalty, runName, githubToken, customTarget, plan, concurrency, orgLease, signal, onStart, onStage, onResult } = opts;
 	onStart?.(repos.length);
-	let workers = daytonaWorkerCount(repos.length, plan, concurrency);
-	const ttl = sandboxTtlSeconds(repos.length, Math.max(1, workers));
+	let workers = workerCount(repos.length, plan, concurrency);
+	const ttl = workerTtlSeconds(repos.length, Math.max(1, workers));
 	const label = runName || 'Judge Hack verification';
 	const results: Array<VerifyResult | undefined> = new Array(repos.length);
 	let nextIndex = 0;
@@ -205,9 +192,14 @@ export async function runRepos(opts: BatchOpts): Promise<VerifyResult[]> {
 		return scoredWait as VerifyResult[];
 	};
 
+	if (!String(githubToken || '').trim()) {
+		onStage?.(GITHUB_TOKEN_MISSING_REASON);
+		return fillGaps(GITHUB_TOKEN_MISSING_REASON);
+	}
+
 	try {
 		if (orgLease) {
-			workers = daytonaWorkerCount(
+			workers = workerCount(
 				repos.length,
 				plan,
 				concurrency,
@@ -217,8 +209,8 @@ export async function runRepos(opts: BatchOpts): Promise<VerifyResult[]> {
 		onStage?.(workers < 1
 			? ORG_BUSY_REASON
 			: (workers === 1
-				? 'Starting the Daytona sandbox…'
-				: `Starting ${workers} Daytona sandboxes…`));
+				? 'Starting the evaluator…'
+				: `Starting ${workers} evaluators…`));
 
 		if (workers < 1) {
 			fillGaps(ORG_BUSY_REASON);
@@ -227,40 +219,32 @@ export async function runRepos(opts: BatchOpts): Promise<VerifyResult[]> {
 
 	const verifyOne = async (
 		index: number,
-		tokenRef: { token: string; bundleReady: boolean },
+		tokenRef: { token: string },
 		recycle: () => Promise<void>,
 	): Promise<VerifyResult> => {
 		const row = withTarget(repos[index], customTarget);
-		onStage?.(`#${index + 1}/${repos.length} ${row.project || row.github} · ${workers} sandbox${workers === 1 ? '' : 'es'}`);
+		onStage?.(`#${index + 1}/${repos.length} ${row.project || row.github} · ${workers} evaluator${workers === 1 ? '' : 's'}`);
 		const t0 = nowMs();
 		const job = { repo: row.github, eventDate, historyPenalty, customTarget };
-		const ensureBundle = async () => {
-			if (tokenRef.bundleReady) return;
-			await prepareSandbox(client, tokenRef.token, onStage);
-			tokenRef.bundleReady = true;
-		};
+		const stage = (text: string) => onStage?.(`#${index + 1}/${repos.length} ${text}`);
+		const verify = () => runVerifyInPython(client, tokenRef.token, job, githubToken, VERIFY_TIMEOUT_MS, stage);
 		try {
-			await ensureBundle();
-			let toolResult = await runVerifyInSandbox(client, tokenRef.token, job);
-			let parsed = parseDaytonaResult(toolResult);
-			if (sandboxLost(parsed, toolResult)) {
-				onStage?.(`#${index + 1} sandbox lost — retrying`);
+			let parsed = parsePythonResult(await verify());
+			if (workerLost(parsed)) {
+				onStage?.(`#${index + 1} evaluator task lost — retrying`);
 				await recycle();
-				await ensureBundle();
-				toolResult = await runVerifyInSandbox(client, tokenRef.token, job);
-				parsed = parseDaytonaResult(toolResult);
+				parsed = parsePythonResult(await verify());
 			}
 			return normalizeResult(parsed, row, (nowMs() - t0) / 1000);
 		} catch (err) {
 			try {
-				onStage?.(`#${index + 1} sandbox error — retrying`);
+				onStage?.(`#${index + 1} evaluator error — retrying`);
 				await recycle();
-				await ensureBundle();
-				const toolResult = await runVerifyInSandbox(client, tokenRef.token, job);
-				return normalizeResult(parseDaytonaResult(toolResult), row, (nowMs() - t0) / 1000);
+				const parsed = parsePythonResult(await verify());
+				return normalizeResult(parsed, row, (nowMs() - t0) / 1000);
 			} catch (err2) {
 				return normalizeResult(
-					{ status: 'unverifiable', reason: `Daytona sandbox error: ${asErrorMessage(err2) || asErrorMessage(err)}` },
+					{ status: 'unverifiable', reason: `Evaluator error: ${asErrorMessage(err2) || asErrorMessage(err)}` },
 					row,
 					(nowMs() - t0) / 1000,
 				);
@@ -271,16 +255,15 @@ export async function runRepos(opts: BatchOpts): Promise<VerifyResult[]> {
 	const runWorker = async (workerId: number): Promise<void> => {
 		if (workerId > 0) await new Promise((resolve) => setTimeout(resolve, workerId * 200));
 		if (signal?.aborted) return;
-		const tokenRef = { token: '', bundleReady: false };
+		const tokenRef = { token: '' };
 		const boot = async () => {
-			tokenRef.token = await openDaytona(client, `${label} · ${workerId + 1}`, ttl);
-			tokenRef.bundleReady = false;
+			tokenRef.token = await openWorker(client, `${label} · ${workerId + 1}`, ttl);
 		};
 		try {
 			await boot();
 		} catch (err) {
 			bootError = asErrorMessage(err);
-			onStage?.(`Sandbox ${workerId + 1} failed to start: ${bootError}`);
+			onStage?.(`Evaluator ${workerId + 1} failed to start: ${bootError}`);
 			return;
 		}
 		const recycle = async () => {
@@ -301,22 +284,11 @@ export async function runRepos(opts: BatchOpts): Promise<VerifyResult[]> {
 		}
 	};
 
-	const runPool = async (count: number) => {
-		workers = count;
-		nextIndex = 0;
-		await Promise.all(Array.from({ length: count }, (_, id) => runWorker(id)));
-	};
-
-	await runPool(workers);
-		if (!results.some(Boolean) && workers > 1 && isDaytonaCpuLimit(bootError)) {
-			onStage?.('Daytona CPU limit hit; retrying with 1 sandbox…');
-			bootError = '';
-			await runPool(1);
-		}
+	await Promise.all(Array.from({ length: workers }, (_, id) => runWorker(id)));
 
 		fillGaps(bootError
-			? `Daytona sandbox error: ${bootError}`
-			: 'No Daytona sandbox was available');
+			? `Evaluator error: ${bootError}`
+			: 'No evaluator worker was available');
 
 		const scored = results as VerifyResult[];
 		const explainable = scored
@@ -353,7 +325,7 @@ export async function runRepos(opts: BatchOpts): Promise<VerifyResult[]> {
 	}
 }
 
-async function withSandbox<T>(
+async function withWorker<T>(
 	client: VerifyClient,
 	name: string,
 	ttl: number,
@@ -371,9 +343,8 @@ async function withSandbox<T>(
 		}
 	}
 	try {
-		const token = await openDaytona(client, name, ttl);
+		const token = await openWorker(client, name, ttl);
 		try {
-			await uploadEvaluatorBundle(client, token);
 			return await fn(token);
 		} finally {
 			await closeToken(client, token);
@@ -387,20 +358,26 @@ async function withSandbox<T>(
 export async function extractTarget(
 	client: VerifyClient,
 	src: ExtractSources,
+	githubToken: string,
 	orgLease?: OrgLease,
 ): Promise<ExtractedTarget> {
 	const hasSource = !!(src.githubUrl?.trim() || src.docsUrl?.trim() || src.pkg?.trim()
 		|| (src.uploads && Object.keys(src.uploads).length));
 	if (!hasSource) return { status: 'empty', reason: 'Provide a GitHub repo, docs URL, package name, or files.' };
-	const toolResult = await withSandbox(client, 'Judge Hack target extract', 600, (token) =>
-		runExtractInSandbox(client, token, {
+	if (!String(githubToken || '').trim()) return { status: 'failed', reason: GITHUB_TOKEN_MISSING_REASON };
+	const toolResult = await withWorker(client, 'Judge Hack target extract', 600, (token) =>
+		runExtractInPython(client, token, {
 			repoUrl: src.githubUrl,
 			docsUrl: src.docsUrl,
 			pkg: src.pkg,
 			uploads: src.uploads,
-		}), orgLease);
+		}, githubToken), orgLease);
 	const draft = parseExtractResult(toolResult);
 	if (draft.status && draft.status !== 'complete') return draft;
+	const docsFailed = (draft.warnings || []).some((w) => /docs url could not be fetched/i.test(w));
+	if (docsFailed || !String(draft.prompt || '').trim()) {
+		return { ...draft, prompt: undefined, corpus_lower: undefined };
+	}
 	try {
 		return await synthesizeExtract(client, draft);
 	} catch (err) {
@@ -422,14 +399,18 @@ export async function testTargetRepo(
 	client: VerifyClient,
 	repoUrl: string,
 	customTarget: { name: string; config: Record<string, unknown> },
+	githubToken: string,
 	orgLease?: OrgLease,
 ): Promise<VerifyResult> {
 	const t0 = nowMs();
 	const row: Submission = { project: '', github: repoUrl, target_name: customTarget.name || 'Target' };
-	const toolResult = await withSandbox(client, 'Judge Hack target test', 600, (token) =>
-		runVerifyInSandbox(client, token, { repo: repoUrl, customTarget }, 180_000), orgLease);
+	if (!String(githubToken || '').trim()) {
+		return normalizeResult({ status: 'unverifiable', reason: GITHUB_TOKEN_MISSING_REASON }, row, 0);
+	}
+	const toolResult = await withWorker(client, 'Judge Hack target test', 600, (token) =>
+		runVerifyInPython(client, token, { repo: repoUrl, customTarget }, githubToken, 180_000), orgLease);
 	const seconds = (nowMs() - t0) / 1000;
-	let result = normalizeResult(parseDaytonaResult(toolResult), row, seconds);
+	let result = normalizeResult(parsePythonResult(toolResult), row, seconds);
 	if (result.classify_failed || result.repo_accessible === false || result.status !== 'complete') {
 		return result;
 	}

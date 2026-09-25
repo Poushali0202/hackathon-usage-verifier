@@ -5,18 +5,27 @@ GitHub evidence.
 
 ## V1 architecture
 
-The app is fully hosted by RocketRide. Each verification starts a pipeline that uses one
-Daytona sandbox execution to fetch repository evidence and run the pinned deterministic
-evaluator. The LLM never writes the tag, backbone, or score. The pipeline fails closed for
-inaccessible or incomplete repositories.
+The app is fully hosted by RocketRide. Each verification invokes the catalog `tool_python`
+node (`hackjudge_python_v1.pipe`) once per repository: the pinned deterministic evaluator
+runs in-process on the RocketRide engine (RestrictedPython) and reads the repository over
+the GitHub REST API and `raw.githubusercontent.com` — repository metadata, the recursive
+git tree, the files the rubric needs, and commit dates. Nothing is cloned and nothing is
+written to disk; there is no sandbox. The LLM never writes the tag, backbone, or score.
+The pipeline fails closed for inaccessible, truncated, or incomplete repositories.
 
-Compute is included with the Judge Hack subscription — users do not bring a Daytona key.
-Developer runs use at most 2 sandboxes (~4 vCPU); Company and Organizers use at most 3
-(~6 vCPU). Sandboxes are terminated when the run ends. The workspace also enforces a
-shared org pool of 5 live sandboxes (Daytona Limits tier 1 / 10 vCPU) in SQL so two
-Store sessions cannot overflow into each other. If the pool is full, Verify shows a
-retry modal instead of opening a sixth box. Daytona CPU retry-to-1 remains as a
-backstop.
+Every GitHub read uses the signed-in judge's own personal access token, stored as
+`ROCKETRIDE_GITHUB_TOKEN` in their RocketRide environment (user scope) from
+Settings → GitHub access. There is no shared GitHub secret; a judge without a token
+cannot start a run, prefill, or repository test (fail closed with a Settings link).
+
+Compute is included with the Judge Hack subscription. Developer runs verify at most 2
+repositories at once; Company and Organizers at most 3. The workspace also enforces a
+shared org pool of 5 concurrent evaluators in SQL so two Store sessions cannot overflow
+into each other; if the pool is full, Verify shows a retry modal.
+
+The evaluator source of truth is `Projects/hackathon-usage-verifier/eval`; `npm run gen`
+flattens it (via `tools/build_restricted_bundle.py`) into
+`src/verify/generated/evaluatorBundle.ts`, which the app sends as the `code` input.
 
 Prepaid metering is a hard stop: Developer 4 MB, Company 20 MB, Organizers 40 MB at $5/MB
 (average repo 500 KB). A run that would exceed remaining allowance is truncated; an empty
@@ -42,12 +51,11 @@ describe the product. Company and Organizers plans may change that target’s we
 and tag cut-offs. The RocketRide preset uses the pipeline rubric. Architecture
 templates only rename the five-layer backbone plates.
 
-V1 accepts public GitHub repositories. Credentials are resolved from server-side RocketRide
-environment secrets:
+V1 accepts public GitHub repositories (private ones work when the judge's token can read
+them). Credentials:
 
-- `ROCKETRIDE_DAYTONA_KEY`
-- `ROCKETRIDE_ANTHROPIC_KEY`
-- `ROCKETRIDE_GITHUB_TOKEN`
+- `ROCKETRIDE_ANTHROPIC_KEY` — org-scope RocketRide environment secret, explain pipe only.
+- `ROCKETRIDE_GITHUB_TOKEN` — per judge, user scope, entered in the app's Settings.
 
 Migration notes: [docs/BINDINGS.md](./docs/BINDINGS.md), [docs/CONTRACT.md](./docs/CONTRACT.md),
 [docs/MIGRATION-NOTES.md](./docs/MIGRATION-NOTES.md).

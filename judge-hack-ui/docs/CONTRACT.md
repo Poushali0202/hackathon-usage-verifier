@@ -6,10 +6,12 @@ This file is the spec later stages build against. SQL is Stage 3; pipes and
 
 ## Architecture
 
-Backend is not an app-owned server. Stage 1 verification runs inside a Daytona
-sandbox: git clone (optional GitHub token from server env), pinned Python
-evaluator, fail-closed on inaccessible repos. The LLM explains after the
-verdict; it never writes tag, backbone, or score.
+Backend is not an app-owned server. Verification runs in the catalog
+`tool_python` node on the RocketRide engine (RestrictedPython, in-process):
+the pinned Python evaluator reads the repository over the GitHub REST/raw API
+with the judge's own token — no sandbox, no git clone, nothing on disk — and
+fails closed on inaccessible, truncated, or incomplete repos. The LLM explains
+after the verdict; it never writes tag, backbone, or score.
 
 Catalog pipeline generation, app-local `.pipe` copies, `client.use({ pipeline })`,
 `validate`/`deployTo`, and `verifyApp`/`addApp`/`publishApp('@me')` are Stage 2.
@@ -70,13 +72,16 @@ validates/deploys). The generator also writes workspace `pipelines/` for
 disk-based deploy tooling. The Design canvas may rewrite `project_id` on
 watched `pipelines/` folders; do not treat those copies as identity.
 
-1. **Judge Hack Daytona V1** (`bde4acbb-7db2-4a97-8d01-28214a1bc284`) —
-   identity + repo URL in; Daytona sandbox runs the pinned Python evaluator;
-   answers out. A dummy `agent_rocketride` is present only so `tool_daytona`
-   can be invoked via `client.tool`; it is instructed not to answer or invent
-   JSON. The LLM never writes tag, backbone, or score. Batches use a pool of
-   4 sandboxes (8 on Company / Organizers), one repo at a time per sandbox.
-   Explain still starts only after those tokens are terminated.
+1. **Judge Hack Python V1** (`3f6b9d2e-5c41-4a8f-9e07-6d2b8c1a4f53`) —
+   `tool_python` at node id `python_1` (`allowedModules: urllib, html`,
+   `timeout: 900`). The app sends the flat evaluator script plus a `JOB`
+   literal and the judge's `TOKEN`, and reads the script's `result` dict.
+   A dummy `agent_rocketride` is present only so the tool can be invoked via
+   `client.tool`; it is instructed not to answer or invent JSON. The LLM never
+   writes tag, backbone, or score. Batches use a pool of 2 workers (3 on
+   Company / Organizers), one repo at a time per worker, capped at 5 per
+   workspace. Explain starts only after those tokens are terminated.
+   Replaces the retired Daytona pipe (`bde4acbb-…`).
 2. **Judge Hack Explain V1** (`cf2762a0-ee71-4f77-9d99-1296e81e71b4`) —
    post-verdict prose only.
 
@@ -108,7 +113,7 @@ email and displayName optional). No hardcoded actor names.
 
 ## Cross-language equivalence
 
-The evaluator stays Python (sandbox). TypeScript owns UI, sheet I/O, stamps,
+The evaluator stays Python (`tool_python`). TypeScript owns UI, sheet I/O, stamps,
 and entitlement mapping. No mirrored scoring logic to keep in sync.
 
 ## Acceptance gates

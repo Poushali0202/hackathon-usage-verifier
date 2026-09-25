@@ -14,13 +14,22 @@
 // silently (the frozen-preview bug).
 import 'react/jsx-dev-runtime';
 
+import React from 'react';
 import type { AppDescriptor } from 'shell';
 import App from './App';
+import { JudgeHackIcon, JudgeHackLogo } from './JudgeHackBrand';
 
 const descriptor: AppDescriptor = {
 	id: 'hackjudge.judge-hack',
 	name: 'Judge Hack',
-	branding: { appName: 'Judge Hack' },
+	branding: {
+		appName: 'Judge Hack',
+		logo: React.createElement(JudgeHackLogo),
+		icon: React.createElement(JudgeHackIcon, { size: 22 }),
+		iconLight: React.createElement(JudgeHackIcon, { size: 22 }),
+		iconDark: React.createElement(JudgeHackIcon, { size: 22 }),
+		hideAnnouncements: true,
+	},
 	app: App,
 };
 

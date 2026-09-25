@@ -381,6 +381,54 @@
 	border-right: 1px solid var(--rr-border, rgba(30, 26, 52, .14));
 	background: var(--rr-bg-paper, #FAFBF8);
 }
+/* Shell header is inline height:52 — expand it so the lockup can sit at page scale. */
+#rr-shell-sidebar > div:first-of-type {
+	height: 108px !important;
+	min-height: 108px !important;
+	align-items: flex-start !important;
+	padding-top: 10px !important;
+	margin-bottom: 4px !important;
+}
+/* Collapsed rail is 56px — keep the stock header so the mark is not clipped. */
+#rr-shell-sidebar[style*="width: 56px"] > div:first-of-type {
+	height: 52px !important;
+	min-height: 52px !important;
+	align-items: center !important;
+	padding-top: 8px !important;
+}
+
+/* Shell sidebar header lives outside .jh — keep these selectors global. */
+.jh-brand {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	width: 100%;
+	min-width: 0;
+	padding: 0 4px;
+}
+.jh-brand-wordmark {
+	font-family: var(--rr-font-family, Inter, system-ui, sans-serif);
+	font-size: 28px;
+	font-weight: 800;
+	letter-spacing: -0.05em;
+	line-height: 1;
+	white-space: nowrap;
+}
+.jh-brand-judge { color: var(--rr-text-primary, #1E1A34); }
+.jh-brand-hack { color: #F93822; }
+@keyframes jh-brand-hop {
+	0%, 100% { transform: translateY(1px); }
+	42% { transform: translateY(-5px); }
+}
+.jh-brand-mark {
+	animation: jh-brand-hop 2.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.jh-brand-mark { animation: none; }
+}
+
 .jh-nav { padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; min-height: 100%; height: 100%; box-sizing: border-box; }
 .jh-nav.is-collapsed button { text-align: center; padding: 9px 6px; font-size: 12px; }
 .jh-nav button {

@@ -2,5 +2,7 @@ node_modules/
 dist/
 __pycache__/
 *.pyc
-.tmp-*
+.tmp-two-store-findings.json
 .env
+.env.*
+!.env.example

@@ -1,4 +1,4 @@
-import { DAYTONA_ORG_SLOTS } from './pool';
+import { ORG_SLOTS } from './pool';
 
 /** Shown in the sheet and the on-screen modal when the org pool is full. */
 export const ORG_BUSY_REASON = 'Included compute is busy. Retry in a moment.';
@@ -23,7 +23,7 @@ export function isOrgBusyError(err: unknown): boolean {
 export function claimableSlots(
 	wanted: number,
 	live: number,
-	orgSlots = DAYTONA_ORG_SLOTS,
+	orgSlots = ORG_SLOTS,
 ): number {
 	if (wanted <= 0) return 0;
 	return Math.max(0, Math.min(Math.floor(wanted), orgSlots - Math.max(0, live)));
@@ -57,7 +57,7 @@ export function createOrgLease(backend: {
  * In-process org pool with a mutex so two concurrent claim() calls cannot
  * both observe the same remaining count. Production uses SQL slot rows.
  */
-export function createMemoryOrgPool(orgSlots = DAYTONA_ORG_SLOTS): () => OrgLease {
+export function createMemoryOrgPool(orgSlots = ORG_SLOTS): () => OrgLease {
 	let live = 0;
 	let chain = Promise.resolve();
 	const locked = async <T,>(fn: () => T | Promise<T>): Promise<T> => {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuthUser } from 'shell';
 import astronaut from '../astronaut.svg';
 import { openAccount, openCheckout } from '../billing';
+import { BILLING_LIVE } from '../entitlement';
 import { Page, StoreBanner } from '../components/bits';
 import { runDuration } from '../format';
 import { formatDataKb, remainingKb, planBudgetKb } from '../verify/meter';
@@ -34,12 +35,14 @@ export default function Dashboard() {
 						<div className="muted" style={{ fontSize: 12, fontWeight: 700, marginBottom: 2 }}>Signed in with RocketRide</div>
 						<b>{user.displayName || user.preferredUsername}</b>
 						<div className="muted" style={{ fontSize: 12.5 }}>
-							{user.email} · {planLabel} plan{settings.billingStatus ? ` · ${settings.billingStatus.replace(/_/g, ' ')}` : ''}
-							{' · '}{formatDataKb(remainingKb(settings.plan, settings.meter_kb_used))} of {formatDataKb(planBudgetKb(settings.plan))} left
+							{user.email}
+							{BILLING_LIVE
+								? ` · ${planLabel} plan${settings.billingStatus ? ` · ${settings.billingStatus.replace(/_/g, ' ')}` : ''} · ${formatDataKb(remainingKb(settings.plan, settings.meter_kb_used))} of ${formatDataKb(planBudgetKb(settings.plan))} left`
+								: ' · billing paused — all features open for testing'}
 						</div>
 					</div>
 					<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-						<button className="btn sm" type="button" onClick={() => openCheckout()}>Subscribe</button>
+						{BILLING_LIVE && <button className="btn sm" type="button" onClick={() => openCheckout()}>Subscribe</button>}
 						<button className="btn ghost sm" type="button" onClick={() => go('pricing')}>Plans</button>
 						<button className="btn ghost sm" type="button" onClick={() => openAccount()}>Account</button>
 					</div>

@@ -5,13 +5,14 @@ import {
 	SETTING_GRACE_DAYS,
 	SETTING_HISTORY_PENALTY,
 	SETTING_STORE_VARIANT,
-	planFromSubscription,
 } from './billing';
+import { BILLING_LIVE, resolvePlan } from './entitlement';
 import { countsFromResults, summarize } from './format';
 import { actorFrom } from './identity';
 import type { JudgeSettings, StoredRun, StoreStatus, Submission, TargetRecord, VerifyResult } from './types';
 import { scoringConfigForPlan } from './verify/architecture';
-import { runRepos } from './verify/session';
+import { GITHUB_ENV_READ_REASON, GITHUB_TOKEN_MISSING_REASON, runRepos } from './verify/session';
+import { inspectGithubToken, requireGithubToken, type EnvClient } from './verify/githubToken';
 import { classifySqlError, openSqlStore, shouldImportAppState, type SqlClient, type SqlStore, type StoreVariant } from './verify/sqlStore';
 import { consumedKbFromRuns, gateBatch, resultMetersKb } from './verify/meter';
 import { createOrgLease, type OrgLease } from './verify/leases';
@@ -64,6 +65,11 @@ type RunsApi = {
 	stop: () => void;
 	hydrateResults: (id: string) => void;
 	makeOrgLease: (kind: string) => OrgLease;
+	/** null = not checked yet; false = no usable token (missing, or the env read failed). */
+	githubTokenReady: boolean | null;
+	/** Set when getEnv failed — distinct from "judge never saved a token". */
+	githubTokenError: string | null;
+	refreshGithubToken: () => Promise<boolean>;
 };
 
 const Ctx = createContext<RunsApi | null>(null);
@@ -107,19 +113,36 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 	const [runs, setRuns] = useState<StoredRun[]>(() => asRuns(appState, ownerUserId));
 	const [targets, setTargets] = useState<TargetRecord[]>(() => asTargets(appState, ownerUserId));
-	const [meterKb, setMeterKb] = useState(() => Math.max(
-		readTenantMeterKb(appState, ownerUserId),
-		consumedKbFromRuns(asRuns(appState, ownerUserId)),
-	));
+	const [meterKb, setMeterKb] = useState(() => consumedKbFromRuns(asRuns(appState, ownerUserId)));
 	if (meterRef.current == null) meterRef.current = meterKb;
 	const [store, setStore] = useState<StoreStatus>({ kind: 'appState', ready: false });
+	const [githubTokenReady, setGithubTokenReady] = useState<boolean | null>(null);
+	const [githubTokenError, setGithubTokenError] = useState<string | null>(null);
 	runsRef.current = runs;
 	targetsRef.current = targets;
+
+	const refreshGithubToken = useCallback(async () => {
+		if (!client || !isConnected) return false;
+		const inspected = await inspectGithubToken(client as unknown as EnvClient);
+		if (inspected.error) {
+			setGithubTokenError(inspected.error);
+			setGithubTokenReady(false);
+			return false;
+		}
+		setGithubTokenError(null);
+		setGithubTokenReady(inspected.present);
+		return inspected.present;
+	}, [client, isConnected]);
+
+	useEffect(() => {
+		if (!client || !isConnected) { setGithubTokenReady(null); setGithubTokenError(null); return; }
+		void refreshGithubToken();
+	}, [client, isConnected, refreshGithubToken]);
 
 	const billingStatus = getStatus(APP_ID);
 	const billedApp = desktopApps.find((a) => a.id === APP_ID);
 	const prefPlan = getPref('hj.plan') === 'developer' ? 'developer' : 'company';
-	const plan = planFromSubscription(billingStatus, billedApp, prefPlan);
+	const plan = resolvePlan(billingStatus, billedApp, prefPlan);
 	const storeVariant: StoreVariant = wsSettings[SETTING_STORE_VARIANT] === 'external' ? 'external' : 'default';
 
 	const settings: JudgeSettings = {
@@ -260,10 +283,7 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 		const nextRuns = asRuns(appStateRef.current, ownerUserId);
 		setRuns(nextRuns);
 		setTargets(asTargets(appStateRef.current, ownerUserId));
-		const nextMeter = Math.max(
-			readTenantMeterKb(appStateRef.current, ownerUserId),
-			consumedKbFromRuns(nextRuns),
-		);
+		const nextMeter = consumedKbFromRuns(nextRuns);
 		meterRef.current = nextMeter;
 		setMeterKb(nextMeter);
 		liveRef.current = null;
@@ -361,30 +381,33 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 		if (!store.ready) return;
 		const localRuns = asRuns(appState, ownerUserId);
 		const localTargets = asTargets(appState, ownerUserId).filter((t) => !t.is_preset);
-		const storedMeter = readTenantMeterKb(appState, ownerUserId);
-		if (storedMeter > (meterRef.current || 0)) {
-			meterRef.current = storedMeter;
-			setMeterKb(storedMeter);
-		}
-		if (!localRuns.length && !localTargets.length) return;
-		const mergedRuns = mergeRuns(runsRef.current, localRuns);
-		const mergedTargets = mergeTargets(targetsRef.current.filter((t) => !t.is_preset), localTargets);
-		if (runFingerprint(mergedRuns) === runFingerprint(runsRef.current)) return;
-		setRuns(mergedRuns);
-		setTargets(withPreset(mergedTargets));
-		const derived = consumedKbFromRuns(mergedRuns);
-		if (derived > (meterRef.current || 0)) {
-			meterRef.current = derived;
-			setMeterKb(derived);
-		}
-		if (store.kind === 'sql' && sqlRef.current) {
-			const opened = sqlRef.current;
-			for (const run of mergedRuns) {
-				const shown = runsRef.current.find((r) => r.id === run.id);
-				if (shouldRepairRun(shown, run)) {
-					void opened.upsertRun(run).catch(() => { /* keep workspace rows visible */ });
+		if (localRuns.length || localTargets.length) {
+			const mergedRuns = mergeRuns(runsRef.current, localRuns);
+			const mergedTargets = mergeTargets(targetsRef.current.filter((t) => !t.is_preset), localTargets);
+			if (runFingerprint(mergedRuns) !== runFingerprint(runsRef.current)) {
+				setRuns(mergedRuns);
+				setTargets(withPreset(mergedTargets));
+			}
+			const derived = consumedKbFromRuns(mergedRuns);
+			if (derived !== (meterRef.current || 0)) {
+				meterRef.current = derived;
+				setMeterKb(derived);
+			}
+			if (store.kind === 'sql' && sqlRef.current) {
+				const opened = sqlRef.current;
+				for (const run of mergedRuns) {
+					const shown = runsRef.current.find((r) => r.id === run.id);
+					if (shouldRepairRun(shown, run)) {
+						void opened.upsertRun(run).catch(() => { /* keep workspace rows visible */ });
+					}
 				}
 			}
+			return;
+		}
+		const derived = consumedKbFromRuns(runsRef.current);
+		if (derived !== (meterRef.current || 0)) {
+			meterRef.current = derived;
+			setMeterKb(derived);
 		}
 	}, [appState, ownerUserId, store.kind, store.ready]);
 
@@ -417,9 +440,14 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 	const startBatch = useCallback((opts: StartOpts) => {
 		if (!client || !isConnected) throw new Error('RocketRide is not connected yet.');
 		if (abortRef.current) throw new Error('A verification is already running. Stop it before starting another.');
-		const used = Math.max(meterRef.current || 0, consumedKbFromRuns(runsRef.current));
+		if (githubTokenError) throw new Error(GITHUB_ENV_READ_REASON);
+		if (githubTokenReady === false) throw new Error(GITHUB_TOKEN_MISSING_REASON);
+		const used = consumedKbFromRuns(runsRef.current);
 		meterRef.current = used;
-		const gate = gateBatch(plan, used, opts.repos.length);
+		setMeterKb(used);
+		const gate = BILLING_LIVE
+			? gateBatch(plan, used, opts.repos.length)
+			: { maxRepos: opts.repos.length, remaining_kb: Number.POSITIVE_INFINITY, truncated: false, blocked: false, reason: '' };
 		if (gate.maxRepos < 1) throw new Error(gate.reason);
 		const repos = opts.repos.slice(0, gate.maxRepos);
 		const target = targets.find((t) => t.id === opts.targetId) || ROCKETRIDE_PRESET;
@@ -450,20 +478,22 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 			updated_by: actor,
 			updated_at: created_at,
 			stage: gate.truncated
-				? `Starting Daytona sandboxes… (${gate.reason})`
-				: 'Starting Daytona sandboxes…',
+				? `Checking GitHub access… (${gate.reason})`
+				: 'Checking GitHub access…',
 		};
 		writeRun(base);
 		const ctrl = new AbortController();
 		abortRef.current = ctrl;
 		void (async () => {
 			try {
+				const githubToken = await requireGithubToken(client as unknown as EnvClient);
 				await runRepos({
 					client,
 					repos,
 					eventDate: opts.eventDate,
 					historyPenalty: opts.historyPenalty,
 					runName: opts.name,
+					githubToken,
 					customTarget,
 					plan,
 					orgLease: makeOrgLease('verify'),
@@ -525,11 +555,12 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 			}
 		})();
 		return id;
-	}, [actor, client, isConnected, makeOrgLease, ownerUserId, plan, setPref, targets, writeRun]);
+	}, [actor, client, githubTokenError, githubTokenReady, isConnected, makeOrgLease, ownerUserId, plan, setPref, targets, writeRun]);
 
 	const api = useMemo<RunsApi>(() => ({
 		runs, targets, settings, store, saveSettings, getRun, saveTarget, deleteTarget, startBatch, stop, hydrateResults, makeOrgLease,
-	}), [runs, targets, settings.grace_days, settings.history_penalty, settings.plan, settings.billingStatus, settings.meter_kb_used, store, getRun, saveTarget, deleteTarget, startBatch, stop, hydrateResults, makeOrgLease]);
+		githubTokenReady, githubTokenError, refreshGithubToken,
+	}), [runs, targets, settings.grace_days, settings.history_penalty, settings.plan, settings.billingStatus, settings.meter_kb_used, store, getRun, saveTarget, deleteTarget, startBatch, stop, hydrateResults, makeOrgLease, githubTokenReady, githubTokenError, refreshGithubToken]);
 
 	return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 };

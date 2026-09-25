@@ -29,15 +29,21 @@ export function formatDataKb(kb: number): string {
 	return `${Math.max(0, Math.round(kb))} KB`;
 }
 
-/** A row that never occupied a sandbox does not draw the prepaid meter. */
+/** A row whose evaluation never started (or never fetched code) does not draw the prepaid meter. */
 export function resultMetersKb(result: Pick<VerifyResult, 'reason' | 'status'>): number {
 	const reason = String(result.reason || '');
+	const status = String(result.status || '');
 	if (/run stopped before this repo started/i.test(reason)) return 0;
-	if (/no daytona sandbox was available/i.test(reason)) return 0;
-	if (/daytona sandbox error/i.test(reason) && /cpu limit|concurrency limits|maximum allowed/i.test(reason)) {
-		return 0;
-	}
+	if (/no evaluator worker was available/i.test(reason)) return 0;
+	if (/github token missing/i.test(reason)) return 0;
+	if (/could not read your rocketride environment/i.test(reason)) return 0;
+	if (/^Evaluator error:/i.test(reason)) return 0;
+	if (/evaluator timed out/i.test(reason)) return 0;
 	if (/included compute is busy/i.test(reason)) return 0;
+	// Evaluator crashes and missing repos never produced scored code — do not drain prepaid.
+	if (/TypeError|AttributeError|NameError|gather\(\) takes/i.test(reason)) return 0;
+	if (/GitHub returned HTTP 404/i.test(reason)) return 0;
+	if (status && status !== 'complete' && /takes from \d+ to \d+ positional arguments/i.test(reason)) return 0;
 	return AVG_REPO_KB;
 }
 

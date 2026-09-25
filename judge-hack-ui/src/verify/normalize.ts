@@ -53,7 +53,7 @@ export function normalizeResult(raw: VerifyResult, row: Submission, seconds: num
 
 	const http = Number(raw.http_status);
 	const reasonText = String(raw.reason || '');
-	const sandboxError = /daytona sandbox error/i.test(reasonText)
+	const sandboxError = /^Evaluator (error|timed out)/i.test(reasonText)
 		|| status === 'invalid';
 	const missingRepo = !sandboxError && (
 		http === 404
@@ -66,7 +66,7 @@ export function normalizeResult(raw: VerifyResult, row: Submission, seconds: num
 	const noVerdict = !complete || fetchIncomplete || sandboxError || !!raw.truncated;
 	const failReason = reasonText
 		|| (fetchIncomplete ? 'Evidence fetch was incomplete — no verdict on partial retrieval' : '')
-		|| (sandboxError ? 'Sandbox returned an incomplete payload — no verdict' : '')
+		|| (sandboxError ? 'Evaluator returned an incomplete payload — no verdict' : '')
 		|| (!complete ? 'Verification did not finish — no verdict' : '');
 	const called = typeof raw.pipelines_called === 'number'
 		? raw.pipelines_called
