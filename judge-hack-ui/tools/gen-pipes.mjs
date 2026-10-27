@@ -1,10 +1,13 @@
 /**
  * Owns every Judge Hack `.pipe` file.
  *
- * Stable project_ids are pinned here. Task addressing and deploy history key
- * on them — never regenerate. Writes `src/pipelines/` (app import + Stage 2
- * validate/deploy) and workspace `pipelines/` (disk-based tooling). The
- * Design canvas may rewrite `project_id` on watched `pipelines/` folders.
+ * Stable project_ids live in `src/pipelines/project-ids.json`. Task addressing
+ * and deploy history key on them - never regenerate. Writes `src/pipelines/`
+ * only (app import + Stage 2 validate/deploy). There used to be a second copy
+ * under the workspace `pipelines/` folder; the App Builder extension enforces
+ * unique project_ids across every `.pipe` it can see, so the duplicate made it
+ * re-id both copies seconds after every write. Open the `src/pipelines/` files
+ * in the canvas directly instead.
  *
  * `components` is always the first field (ROCKETRIDE_PIPELINES.md).
  *
@@ -23,12 +26,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
 const workspaceRoot = findWorkspaceRoot(appRoot);
 
-/** Permanent identities. Do not change. */
-export const PROJECT_IDS = {
-	python: '3f6b9d2e-5c41-4a8f-9e07-6d2b8c1a4f53',
-	explain: 'cf2762a0-ee71-4f77-9d99-1296e81e71b4',
-	sql: '8e2a6c14-b7f1-4d93-9a50-1c4e8f2d7b36',
-};
+/** Permanent identities. Do not change. Shared with stage2-publish and the tests. */
+export const PROJECT_IDS = JSON.parse(
+	fs.readFileSync(path.join(appRoot, 'src', 'pipelines', 'project-ids.json'), 'utf8'),
+);
 
 /** Retired personal-Postgres fallback id — never reuse: c5d9e2b8-1a47-4f06-8d3c-9b7e0a4f2c18 */
 
@@ -262,10 +263,10 @@ const PIPES = [
 	['hackjudge_sql_v1.pipe', sql],
 ];
 
-const destinations = [
-	path.join(appRoot, 'src', 'pipelines'),
-	path.join(workspaceRoot, 'pipelines'),
-];
+const destinations = [path.join(appRoot, 'src', 'pipelines')];
+
+/** The old duplicate location. Any copy left there collides with src/pipelines/. */
+const DUPLICATE_DIR = path.join(workspaceRoot, 'pipelines');
 
 function serialize(pipe) {
 	const ordered = {
@@ -293,6 +294,13 @@ for (const dir of destinations) {
 			fs.unlinkSync(stale);
 			console.log(`Removed retired ${stale}`);
 		}
+	}
+}
+for (const filename of [...RETIRED, ...PIPES.map(([name]) => name)]) {
+	const dup = path.join(DUPLICATE_DIR, filename);
+	if (fs.existsSync(dup)) {
+		fs.unlinkSync(dup);
+		console.log(`Removed duplicate ${dup} (collides with src/pipelines/${filename})`);
 	}
 }
 

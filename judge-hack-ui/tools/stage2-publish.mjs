@@ -12,9 +12,13 @@
  * and team rungs live in team-share.mjs).
  *
  * Run from anywhere:
- *   node apps/judge-hack-ui/tools/stage2-publish.mjs --target staging
- *   node apps/judge-hack-ui/tools/stage2-publish.mjs --target cloud --app-id <prod id>
- *   node apps/judge-hack-ui/tools/stage2-publish.mjs --validate-only
+ *   node judge-hack-ui/tools/stage2-publish.mjs --target staging
+ *   node judge-hack-ui/tools/stage2-publish.mjs --target cloud --app-id <prod id>
+ *   node judge-hack-ui/tools/stage2-publish.mjs --validate-only
+ *
+ * Run it from wherever the app is checked out. Do NOT reach the app through a
+ * junction or symlink such as apps/judge-hack-ui: the App Builder extension
+ * then sees every .pipe twice and re-assigns the project_ids within seconds.
  *
  * Flags: --target <cloud|staging|local>  --validate-only  --verify-only
  *        --skip-pipes  --skip-app  --app-id <id>  --comment <text>
@@ -81,9 +85,28 @@ function runGen(script) {
 	}
 }
 
+const PROJECT_IDS = JSON.parse(
+	fs.readFileSync(path.join(appRoot, 'src', 'pipelines', 'project-ids.json'), 'utf8'),
+);
+const PIPE_KEYS = {
+	'hackjudge_python_v1.pipe': 'python',
+	'hackjudge_explain_v1.pipe': 'explain',
+	'hackjudge_sql_v1.pipe': 'sql',
+};
+
+/** Reads a generated pipe and re-pins its project_id. The App Builder extension
+ * rewrites ids it considers duplicates, and a drifted id would deploy a brand
+ * new pipeline instead of a new version of the existing one. */
 function readPipe(filename) {
 	const dest = path.join(appRoot, 'src', 'pipelines', filename);
-	return JSON.parse(fs.readFileSync(dest, 'utf8'));
+	const pipeline = JSON.parse(fs.readFileSync(dest, 'utf8'));
+	const pinned = PROJECT_IDS[PIPE_KEYS[filename]];
+	if (!pinned) throw new Error(`${filename}: no pinned project_id in project-ids.json`);
+	if (pipeline.project_id !== pinned) {
+		console.log(`${filename}: project_id on disk is ${pipeline.project_id}; re-pinned to ${pinned} (run npm run gen)`);
+		pipeline.project_id = pinned;
+	}
+	return pipeline;
 }
 
 function catalogNames() {

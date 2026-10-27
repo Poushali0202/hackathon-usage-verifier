@@ -11,6 +11,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { findWorkspaceRoot } from '../tools/env.mjs';
 import { inferArchitectureTemplate, ARCHITECTURE_TEMPLATES } from '../src/verify/architecture';
 import { extractTarget, runRepos, type VerifyClient } from '../src/verify/session';
 import { parseCsv } from '../src/verify/sheet';
@@ -21,7 +22,7 @@ import type { ExtractedTarget, Submission, VerifyResult } from '../src/types';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
-const workspaceRoot = path.resolve(appRoot, '..', '..');
+const workspaceRoot = findWorkspaceRoot(appRoot);
 const evalsDir = path.join(appRoot, 'evals');
 const require = createRequire(path.join(appRoot, 'package.json'));
 const { RocketRideClient } = require('rocketride') as {

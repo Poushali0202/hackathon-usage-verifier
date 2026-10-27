@@ -8,13 +8,14 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { findWorkspaceRoot } from '../tools/env.mjs';
 import { runRepos, type VerifyClient } from '../src/verify/session';
 import { planWorkerCap } from '../src/verify/pool';
 import type { PlanTier, Submission } from '../src/types';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
-const workspaceRoot = path.resolve(appRoot, '..', '..');
+const workspaceRoot = findWorkspaceRoot(appRoot);
 const require = createRequire(path.join(appRoot, 'package.json'));
 const { RocketRideClient } = require('rocketride') as {
 	RocketRideClient: new (opts: { uri: string; auth: string }) => {

@@ -8,6 +8,8 @@ import { FETCH_CONCURRENCY, HTTP_NODE_ID } from '../src/verify/replay';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+// The permanent ids. Deploy history and task addressing key on them, so the
+// JSON file must hold these and the generated pipes must hold what the JSON says.
 const PYTHON_ID = '3f6b9d2e-5c41-4a8f-9e07-6d2b8c1a4f53';
 const EXPLAIN_ID = 'cf2762a0-ee71-4f77-9d99-1296e81e71b4';
 const SQL_ID = '8e2a6c14-b7f1-4d93-9a50-1c4e8f2d7b36';
@@ -21,6 +23,23 @@ function firstKey(file: string): string {
 
 describe('generated pipes', () => {
 	const canonical = path.join(appRoot, 'src', 'pipelines');
+
+	it('project-ids.json holds the permanent ids', () => {
+		const ids = JSON.parse(fs.readFileSync(path.join(canonical, 'project-ids.json'), 'utf8'));
+		expect(ids).toEqual({ python: PYTHON_ID, explain: EXPLAIN_ID, sql: SQL_ID });
+	});
+
+	it('no duplicate copy of the pipes exists outside src/pipelines (the extension re-ids duplicates)', () => {
+		let dir = appRoot;
+		for (;;) {
+			const parent = path.dirname(dir);
+			if (parent === dir) break;
+			dir = parent;
+			for (const name of ['hackjudge_python_v1.pipe', 'hackjudge_explain_v1.pipe', 'hackjudge_sql_v1.pipe']) {
+				expect(fs.existsSync(path.join(dir, 'pipelines', name)), `${dir}/pipelines/${name}`).toBe(false);
+			}
+		}
+	});
 
 	it('puts components first and keeps stable project_ids', () => {
 		const pythonFile = path.join(canonical, 'hackjudge_python_v1.pipe');
