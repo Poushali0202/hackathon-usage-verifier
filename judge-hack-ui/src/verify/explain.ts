@@ -9,6 +9,7 @@ import {
 	sanitizeExplainProse,
 	type ExplainProse,
 } from './explainParse';
+import { explainVerdictConflicts } from './narration';
 
 export type { ExplainProse } from './explainParse';
 export { extractProse, extractProseFromResponse } from './explainParse';
@@ -244,6 +245,10 @@ export async function explainVerdict(
 				}),
 			]);
 			const parsed = extractProseFromResponse(resp);
+			if (explainVerdictConflicts(parsed, result)) {
+				lastError = 'LLM reply contradicted the stored verdict';
+				continue;
+			}
 			if (hasUsableProse(parsed)) return mergeProse(result, parsed);
 			lastError = 'LLM reply did not contain description / usage JSON';
 		} catch (err) {

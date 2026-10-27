@@ -1,0 +1,32 @@
+{
+  "name": "inline monorepo — runtime-compiled pipeline (Hopper class)",
+  "evidence": {
+    "accessible": true,
+    "dependency": true,
+    "scaffold_only": false,
+    "other_platforms": [],
+    "sdk": {"callsites": 12, "file_spread": 3, "hosted": false, "engine": true},
+    "pipes": [
+      {
+        "path": "<in-code pipeline>",
+        "metrics": {
+          "nodes": 5,
+          "providers": ["webhook", "ner", "response_text"],
+          "has_agent": false,
+          "has_llm": false,
+          "tool_count": 0,
+          "project_id": ""
+        },
+        "called": true,
+        "call_sites": [
+          {
+            "file": "packages/orchestrate/src/rocketride/client.ts",
+            "line": 181,
+            "snippet": "client.use({ pipeline: … }) - in-code pipeline"
+          }
+        ]
+      }
+    ]
+  },
+  "expect": {"tag": "Significant", "backbone": "Yes", "score": 4.5}
+}

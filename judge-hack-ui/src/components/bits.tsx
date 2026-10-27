@@ -135,7 +135,7 @@ export function OrgBusyModal({
 					<h3 id="jh-org-busy-title">Included compute is busy</h3>
 					<p>
 						Other judges in this workspace are using the included evaluator pool
-						right now. Your sheet and settings are unchanged — retry in a moment.
+						right now. Your sheet and settings are unchanged - retry in a moment.
 						This is not a plan lock; the rest of Judge Hack stays available.
 					</p>
 					<div className="row" style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 14 }}>
@@ -176,7 +176,7 @@ export function AllowanceModal({
 					{blocked ? (
 						<p>
 							You&apos;ve used the included allowance on this plan. The next verification is
-							refused until you upgrade — usage cannot run past what you&apos;ve paid.
+							refused until you upgrade - usage cannot run past what you&apos;ve paid.
 						</p>
 					) : (
 						<p>

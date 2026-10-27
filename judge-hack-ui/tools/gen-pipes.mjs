@@ -17,10 +17,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findWorkspaceRoot } from './env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
-const workspaceRoot = path.resolve(appRoot, '..', '..');
+const workspaceRoot = findWorkspaceRoot(appRoot);
 
 /** Permanent identities. Do not change. */
 export const PROJECT_IDS = {

@@ -1,36 +1,23 @@
 /**
  * Org census only — no Daytona. Never prints emails or keys.
+ * Read-only, so it uses the dev pair and needs no --target.
  *   node tools/org-census.mjs
  */
-import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { devPair, findWorkspaceRoot, hostOf, loadWorkspaceEnv, targetOf } from './env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
-const workspaceRoot = path.resolve(appRoot, '..', '..');
+const workspaceRoot = findWorkspaceRoot(appRoot);
 const require = createRequire(path.join(appRoot, 'package.json'));
 const { RocketRideClient } = require('rocketride');
 
-function loadEnv(file) {
-	if (!fs.existsSync(file)) return;
-	for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith('#')) continue;
-		const eq = trimmed.indexOf('=');
-		if (eq < 1) continue;
-		const key = trimmed.slice(0, eq).trim();
-		let val = trimmed.slice(eq + 1).trim();
-		if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-			val = val.slice(1, -1);
-		}
-		if (process.env[key] === undefined) process.env[key] = val;
-	}
-}
-
-loadEnv(path.join(workspaceRoot, '.env'));
-const client = new RocketRideClient({ uri: process.env.ROCKETRIDE_URI, auth: process.env.ROCKETRIDE_APIKEY });
+loadWorkspaceEnv(path.join(workspaceRoot, '.env'));
+const { uri, auth } = devPair();
+console.error(`[dev] host=${hostOf(uri)} target=${targetOf(uri) || 'unrecognised'}`);
+const client = new RocketRideClient({ uri, auth });
 try {
 	const info = await client.connect();
 	const orgId = info.organization?.id;

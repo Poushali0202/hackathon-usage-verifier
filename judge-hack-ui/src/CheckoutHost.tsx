@@ -15,6 +15,7 @@ import {
 } from './billing';
 import { BILLING_LIVE } from './entitlement';
 import { useNav } from './NavContext';
+import { useRuns } from './RunsContext';
 import { useJudgeTheme } from './theme';
 import type { PlanTier } from './types';
 
@@ -34,6 +35,7 @@ type BillingClient = {
 export default function CheckoutHost() {
 	const { theme } = useJudgeTheme();
 	const { view, go } = useNav();
+	const { settings, refreshBilling } = useRuns();
 	const user = useAuthUser();
 	const apiConfig = useShellApiConfig();
 	const { client } = useShellConnection();
@@ -95,7 +97,12 @@ export default function CheckoutHost() {
 			subscriptionId,
 			priceId,
 		});
-	}, [billingClient]);
+		const paid = (livePlans || []).find((p) => p.stripePriceId === priceId);
+		const nick = paid?.nickname
+			|| BILLING_PLANS.find((p) => p.amountCents === paid?.amountCents)?.nickname
+			|| null;
+		void refreshBilling({ planNickname: nick });
+	}, [billingClient, livePlans, refreshBilling]);
 
 	if (!open) return null;
 
@@ -108,7 +115,7 @@ export default function CheckoutHost() {
 				onFetchPlans={fetchPlans}
 				onCreateCheckout={createCheckout}
 				onConfirmPending={confirmPending}
-				onSuccess={close}
+				onSuccess={() => { void refreshBilling(); close(); }}
 				onClose={close}
 			/>
 		);
@@ -134,7 +141,7 @@ export default function CheckoutHost() {
 				<div className="jh-checkout-plans">
 					{BILLING_PLANS.map((p) => {
 						const id = p.nickname.toLowerCase() as PlanTier;
-						const selected = picked ? picked === id : id === 'company';
+						const selected = (picked || settings.plan) === id;
 						return (
 							<button
 								key={p.nickname}
@@ -146,7 +153,7 @@ export default function CheckoutHost() {
 								<b>{p.nickname}</b>
 								<div className="jh-checkout-price">
 									${(p.amountCents / 100).toFixed(0)}
-									<span> prepaid</span>
+									<span> per month</span>
 								</div>
 							</button>
 						);

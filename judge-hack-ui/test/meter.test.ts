@@ -28,11 +28,11 @@ describe('resultMetersKb', () => {
 		})).toBe(0);
 		expect(resultMetersKb({
 			status: 'unverifiable',
-			reason: 'GitHub token missing — add your personal access token in Settings → GitHub access',
+			reason: 'GitHub token missing - add your personal access token in Settings → GitHub access',
 		})).toBe(0);
 		expect(resultMetersKb({
 			status: 'unverifiable',
-			reason: 'Could not read your RocketRide environment — no verdict without confirming your GitHub token',
+			reason: 'Could not read your RocketRide environment - no verdict without confirming your GitHub token',
 		})).toBe(0);
 		expect(resultMetersKb({
 			status: 'unverifiable',

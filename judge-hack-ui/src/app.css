@@ -1,4 +1,4 @@
-/* Judge Hack — product surfaces, using RocketRide --rr-* tokens inside AppLayout. */
+/* Judge Hack - product surfaces, using RocketRide --rr-* tokens inside AppLayout. */
 .jh {
 	--jh-ink: var(--rr-text-primary, #1E1A34);
 	--jh-ink2: var(--rr-text-primary, #12102A);
@@ -381,7 +381,7 @@
 	border-right: 1px solid var(--rr-border, rgba(30, 26, 52, .14));
 	background: var(--rr-bg-paper, #FAFBF8);
 }
-/* Shell header is inline height:52 — expand it so the lockup can sit at page scale. */
+/* Shell header is inline height:52 - expand it so the lockup can sit at page scale. */
 #rr-shell-sidebar > div:first-of-type {
 	height: 108px !important;
 	min-height: 108px !important;
@@ -389,7 +389,7 @@
 	padding-top: 10px !important;
 	margin-bottom: 4px !important;
 }
-/* Collapsed rail is 56px — keep the stock header so the mark is not clipped. */
+/* Collapsed rail is 56px - keep the stock header so the mark is not clipped. */
 #rr-shell-sidebar[style*="width: 56px"] > div:first-of-type {
 	height: 52px !important;
 	min-height: 52px !important;
@@ -397,7 +397,7 @@
 	padding-top: 8px !important;
 }
 
-/* Shell sidebar header lives outside .jh — keep these selectors global. */
+/* Shell sidebar header lives outside .jh - keep these selectors global. */
 .jh-brand {
 	display: flex;
 	flex-direction: column;
@@ -596,7 +596,7 @@
 .jh .rthres .titem { display: flex; align-items: center; gap: 8px; }
 
 /* Desktop-first. Tablet grids at 960, phone layout at 680, tiny at 420.
-   The RocketRide AppLayout sidebar is shell chrome — we compact our own
+   The RocketRide AppLayout sidebar is shell chrome - we compact our own
    nav-rail / labels, not replace the platform switcher. */
 @media (max-width: 960px) {
 	.jh { padding: 22px 20px; }
@@ -734,6 +734,30 @@ html[data-hj-theme="dark"] {
 	background: rgba(255,255,255,.06);
 	color: var(--jh-muted);
 }
+.jh[data-theme="dark"] .jh-status-pill {
+	background: rgba(245, 158, 11, .22);
+	color: #F6C453;
+}
+.jh[data-theme="dark"] .jh-status-pill.on {
+	background: rgba(31, 157, 77, .22);
+	color: #7EE0A3;
+}
+.jh[data-theme="dark"] .jh-narration-callout {
+	border-color: rgba(140, 186, 255, .35);
+	background: rgba(41, 117, 221, .16);
+}
+.jh[data-theme="dark"] .jh-narration-callout.off {
+	border-color: rgba(246, 196, 83, .4);
+	background: rgba(245, 158, 11, .14);
+}
+.jh[data-theme="dark"] .jh-narration-callout h3,
+.jh[data-theme="dark"] .jh-narration-callout p {
+	color: var(--jh-ink);
+}
+.jh[data-theme="dark"] .jh-ai-chip {
+	background: rgba(140, 186, 255, .16);
+	color: #8CBAFF;
+}
 .jh[data-theme="dark"] .dropzone { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.22); }
 .jh[data-theme="dark"] .dropzone:hover,
 .jh[data-theme="dark"] .dropzone.drag { border-color: var(--jh-blue); background: var(--jh-blue-tint); }
@@ -839,4 +863,118 @@ html[data-hj-theme="dark"] {
 .jh-nav[data-theme="dark"] .upgrade { background: rgba(249,56,34,.1); color: #E9ECF6; }
 .jh-nav[data-theme="dark"] img.astro {
 	filter: drop-shadow(0 0 12px rgba(140,186,255,.45)) drop-shadow(0 0 2px rgba(255,255,255,.4));
+}
+
+.jh-narration-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	font-size: 12.5px;
+	margin: 6px 0 10px;
+}
+.jh-narration-card-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+.jh-status-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 11px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 800;
+	letter-spacing: .02em;
+	background: rgba(245, 158, 11, .16);
+	color: #8A5E00;
+}
+.jh-status-pill.on {
+	background: rgba(31, 157, 77, .14);
+	color: var(--jh-green-strong, #177A3E);
+}
+.jh-narration-callout {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px 16px;
+	margin: 10px 0 14px;
+	padding: 14px 16px;
+	border: 1.5px solid rgba(41, 117, 221, .28);
+	border-radius: 10px;
+	background: var(--jh-blue-tint, rgba(41, 117, 221, .07));
+}
+.jh-narration-callout.off {
+	border-color: rgba(245, 158, 11, .45);
+	background: rgba(245, 158, 11, .1);
+}
+.jh-narration-callout h3 {
+	margin: 0 0 4px;
+	font-size: 14.5px;
+	color: var(--jh-ink2, #12102A);
+}
+.jh-narration-callout p {
+	margin: 0;
+	max-width: 52ch;
+	font-size: 13px;
+	color: var(--jh-ink, #1E1A34);
+}
+.jh-prose-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+.jh-ai-chip {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 800;
+	letter-spacing: .02em;
+	background: var(--jh-chip, rgba(41, 117, 221, .09));
+	color: var(--jh-blue, #2975DD);
+}
+.jh-keychip {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	flex-wrap: wrap;
+	padding: 8px 10px;
+	border: 1px solid var(--jh-bd-subtle, rgba(30, 26, 52, .12));
+	border-radius: 8px;
+	margin: 0 0 14px;
+}
+.jh-keychip code {
+	font-size: 12.5px;
+	font-weight: 700;
+}
+.jh-narration-steps {
+	margin: 0 0 4px;
+	padding-left: 18px;
+	font-size: 13px;
+	line-height: 1.6;
+}
+.jh-toast {
+	position: fixed;
+	right: 18px;
+	bottom: 18px;
+	z-index: 80;
+	background: var(--rr-surface, #fff);
+	color: var(--jh-ink, #1e1a34);
+	border: 1px solid var(--jh-bd-subtle, rgba(30, 26, 52, .14));
+	border-radius: 10px;
+	padding: 10px 14px;
+	font-size: 13px;
+	box-shadow: 0 8px 24px rgba(18, 16, 42, .12);
+	max-width: min(420px, calc(100vw - 36px));
+}
+.jh-toast-progress {
+	display: flex;
+	align-items: center;
+	gap: 12px;
 }

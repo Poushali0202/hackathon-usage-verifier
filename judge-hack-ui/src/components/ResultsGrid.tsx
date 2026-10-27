@@ -4,11 +4,13 @@ import { TagPill, ThemeToggle } from './bits';
 import Tower from './Tower';
 import { useJudgeTheme } from '../theme';
 import { isCompanyPlan } from '../billing';
-import { genericScoreMath, isFlagged, scoringSummary, usesPipelineRubric } from '../format';
+import { genericScoreMath, isFlagged, scoringSummary, usesPipelineRubric, judgeArrow} from '../format';
 import { useNav } from '../NavContext';
+import { useNarration } from '../NarrationContext';
 import { useRuns } from '../RunsContext';
 import type { VerifyResult } from '../types';
 import { fallbackProse } from '../verify/explain';
+import { narrationChrome, NARRATION_COPY, narratableIndexes, runNarrateLabel } from '../verify/narration';
 import { exportResultsExcel } from '../verify/sheet';
 
 const tampered = (r: VerifyResult) => (r.history_tampered?.length || 0) > 0;
@@ -26,9 +28,9 @@ function reusedNames(r: VerifyResult): string[] {
 	return (r.reused_pipelines || []).map((p) => (typeof p === 'string' ? p : (p?.name || ''))).filter(Boolean);
 }
 
-/** Always-visible judge summary — stored M3 rows had notes below a clipped scroller and often empty. */
+/** Always-visible judge summary - stored M3 rows had notes below a clipped scroller and often empty. */
 function dossierSummary(r: VerifyResult): string {
-	const existing = String(r.notes || r.justification || '').trim();
+	const existing = judgeArrow(String(r.notes || r.justification || '').trim());
 	if (existing && existing !== String(r.reason || '')) return existing;
 	if (r.classify_failed || r.repo_accessible === false) {
 		return String(r.reason || r.notes || 'This repository could not be verified.');
@@ -72,17 +74,25 @@ function DossierOverlay({ children }: { children: React.ReactNode }) {
 	return host ? createPortal(node, host) : node;
 }
 
-function ProjectDossier({ r, company, onBack }: { r: VerifyResult; company: boolean; onBack: () => void }) {
+function ProjectDossier({ r, company, runId, index, onBack }: {
+	r: VerifyResult;
+	company: boolean;
+	runId?: string;
+	index: number;
+	onBack: () => void;
+}) {
 	const team = teamNames(r.names);
 	const win = windowLabel(r.event_window);
 	const reused = reusedNames(r);
 	const summary = dossierSummary(r);
 	const { go } = useNav();
+	const { narrationOn, busy, openEnable, narrateProject } = useNarration();
+	const chrome = narrationChrome(narrationOn, r);
 	const failed = !!(r.classify_failed || r.repo_accessible === false);
 	const pipelineRubric = usesPipelineRubric(r);
 	const derived = failed ? { description: '', rocketride_usage: '' } : fallbackProse(r);
-	const what = r.description || derived.description || '—';
-	const how = r.rocketride_usage || derived.rocketride_usage || '—';
+	const what = r.description || derived.description || '-';
+	const how = r.rocketride_usage || derived.rocketride_usage || '-';
 	const tower = (pipelineRubric ? r.layers : r.architecture?.length) ? (
 		<Tower
 			layers={pipelineRubric ? r.layers : undefined}
@@ -121,8 +131,8 @@ function ProjectDossier({ r, company, onBack }: { r: VerifyResult; company: bool
 					{company && (r.project_predates || tampered(r)) && (
 						<div className="dqline">
 							<b>Flagged</b>{' '}
-							{!!r.project_predates && <>— work goes back to <b>{String(r.earliest_commit || '').slice(0, 10)}</b>, before the event window {win ? `(${win})` : ''}. </>}
-							{tampered(r) && <>— commit-date rewriting detected: {(r.history_tampered || []).slice(0, 3).map((t) =>
+							{!!r.project_predates && <>- work goes back to <b>{String(r.earliest_commit || '').slice(0, 10)}</b>, before the event window {win ? `(${win})` : ''}. </>}
+							{tampered(r) && <>- commit-date rewriting detected: {(r.history_tampered || []).slice(0, 3).map((t) =>
 								`${String(t.sha).slice(0, 7)} authored ${String(t.author).slice(0, 10)} but re-stamped ${String(t.committer).slice(0, 10)}`).join('; ')}. </>}
 							Judge-set penalty applied: <b>−{r.history_penalty ?? 2}</b> pts.
 						</div>
@@ -144,15 +154,41 @@ function ProjectDossier({ r, company, onBack }: { r: VerifyResult; company: bool
 								: `Judged with the ${r.target_name || 'target'} SDK & platform rubric. The five-layer backbone read is the same stack; only the labels change for this product.`}
 						</div>
 					)}
-					{r.explain_failed && !failed && (
-						<div className="muted" style={{ fontSize: 12.5, margin: '6px 0 10px' }}>
-							Model explanation unavailable{r.explain_error ? ` (${r.explain_error})` : ''}.
-							The paragraphs below are taken from the evidence table; the verdict is unchanged.
+					{!failed && (chrome.enable || chrome.writeProject) && (
+						<div className={`jh-narration-callout ${chrome.enable ? 'off' : 'ready'}`}>
+							<div>
+								<h3>{chrome.enable ? NARRATION_COPY.offBeside : NARRATION_COPY.aiLabel}</h3>
+								<p>{chrome.enable ? NARRATION_COPY.dossierOffBody : NARRATION_COPY.dossierReadyBody}</p>
+							</div>
+							{chrome.enable && (
+								<button className="btn sm" type="button" disabled={busy} onClick={openEnable}>
+									{NARRATION_COPY.enable}
+								</button>
+							)}
+							{chrome.writeProject && runId && (
+								<button
+									className="btn sm"
+									type="button"
+									disabled={busy}
+									onClick={() => { void narrateProject(runId, index); }}
+								>
+									{NARRATION_COPY.writeProject}
+								</button>
+							)}
 						</div>
 					)}
 					{!failed && (
 						<>
-							<div className="detailbox"><b>What it is:</b> {what}</div>
+							<div className="detailbox">
+								<div className="jh-prose-head">
+									<b>What it is:</b>
+									{chrome.aiLabel && <span className="jh-ai-chip">{NARRATION_COPY.aiLabel}</span>}
+									{chrome.fallbackLabel && !chrome.enable && !chrome.writeProject && (
+										<span className="jh-ai-chip">{NARRATION_COPY.fallbackLabel}</span>
+									)}
+								</div>
+								{what}
+							</div>
 							<div className="detailbox"><b>How {r.target_name || 'the target'} is used:</b> {how}</div>
 						</>
 					)}
@@ -217,7 +253,7 @@ function ProjectDossier({ r, company, onBack }: { r: VerifyResult; company: bool
 					{tower}
 					{pipelineRubric && !!r.pipelines?.length && (
 						<div style={{ margin: '10px 0 4px' }}>
-							<div className="section-kicker" style={{ marginBottom: 6 }}>Deterministic evaluation — ground truth</div>
+							<div className="section-kicker" style={{ marginBottom: 6 }}>Deterministic evaluation - ground truth</div>
 							<div className="detailbox" style={{ padding: 0, overflowX: 'auto', whiteSpace: 'normal' }}>
 								<table className="list" style={{ fontSize: 12.5 }}>
 									<thead><tr><th>Pipeline</th><th>Nodes</th><th>Complexity</th><th>Called?</th><th>Built on</th><th>Call sites (proof)</th></tr></thead>
@@ -230,7 +266,7 @@ function ProjectDossier({ r, company, onBack }: { r: VerifyResult; company: bool
 												<td style={{ color: p.called ? 'var(--jh-green-strong, #177A3E)' : 'var(--jh-muted)', fontWeight: 700 }}>
 													{p.called ? 'called' : 'not called'}
 												</td>
-												<td>{company ? (p.first_commit ? String(p.first_commit).slice(0, 10) : '-') : '—'}</td>
+												<td>{company ? (p.first_commit ? String(p.first_commit).slice(0, 10) : '-') : '-'}</td>
 												<td className="mono" style={{ fontSize: 11, whiteSpace: 'pre-line' }}>
 													{(p.call_sites || []).slice(0, 3).map((s) => `${s.file}:${s.line}`).join('\n') || '-'}
 												</td>
@@ -247,15 +283,18 @@ function ProjectDossier({ r, company, onBack }: { r: VerifyResult; company: bool
 	);
 }
 
-export default function ResultsGrid({ results, total, summary, exportName }: {
+export default function ResultsGrid({ results, total, summary, exportName, runId }: {
 	results: VerifyResult[];
 	total?: number;
 	summary?: { tags?: Record<string, number> };
 	exportName?: string;
+	runId?: string;
 }) {
 	const [open, setOpen] = useState<number | null>(null);
 	const { settings } = useRuns();
+	const { narrationOn, busy, narrateRun } = useNarration();
 	const company = isCompanyPlan(settings.plan);
+	const remaining = narratableIndexes(results).length;
 	const done = results.length;
 	const selected = open != null ? results[open] : undefined;
 
@@ -272,7 +311,7 @@ export default function ResultsGrid({ results, total, summary, exportName }: {
 		<div className="glass" style={{ padding: '6px 0 0' }}>
 			{selected && (
 				<DossierOverlay>
-					<ProjectDossier r={selected} company={company} onBack={() => setOpen(null)} />
+					<ProjectDossier r={selected} company={company} runId={runId} index={open ?? 0} onBack={() => setOpen(null)} />
 				</DossierOverlay>
 			)}
 			<div className="jh-toolbar">
@@ -283,6 +322,12 @@ export default function ResultsGrid({ results, total, summary, exportName }: {
 					</span>
 				)}
 				<span className="jh-toolbar-end">
+					{narrationOn && runId && remaining > 0 && (
+						<button className="btn sm" type="button" disabled={busy}
+							onClick={() => { void narrateRun(runId); }}>
+							{runNarrateLabel(remaining)}
+						</button>
+					)}
 					<button className="btn ghost sm" disabled={!done} type="button"
 						onClick={() => { void exportResultsExcel(results, exportName || 'hack-judge-results.xlsx'); }}>
 						Excel
@@ -305,11 +350,11 @@ export default function ResultsGrid({ results, total, summary, exportName }: {
 									{r.names && <div className="muted" style={{ fontSize: 11.5 }}>{r.names}</div>}
 									{(r.classify_failed || r.repo_accessible === false) && (
 										<div className="flagcell" style={{ fontSize: 11.5, marginTop: 4, maxWidth: 420, whiteSpace: 'normal' }}>
-											{String(r.reason || r.notes || 'Verification did not finish — open the row for details.')}
+											{String(r.reason || r.notes || 'Verification did not finish - open the row for details.')}
 										</div>
 									)}
 								</td>
-								<td><TagPill tag={r.tag} failed={r.classify_failed || r.repo_accessible === false} title={r.reason || r.notes} /></td>
+								<td><TagPill tag={r.tag} failed={r.classify_failed || r.repo_accessible === false} title={r.reason || (r.notes ? judgeArrow(r.notes) : undefined)} /></td>
 								<td className="scorecell">{r.score != null ? Number(r.score).toFixed(1) : '-'}</td>
 								<td>{r.backbone || '-'}</td>
 								<td><BuiltOn r={r} company={company} /></td>

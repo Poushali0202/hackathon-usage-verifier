@@ -47,7 +47,7 @@ function lastLine(text: string): string {
 
 /** Why tool_python returned no evaluator object. */
 function executionFailure(tool: PythonShape): string {
-	if (tool.timed_out) return 'Evaluator timed out on the RocketRide engine — no verdict on a partial run';
+	if (tool.timed_out) return 'Evaluator timed out on the RocketRide engine - no verdict on a partial run';
 	const err = lastLine(tool.stderr || '');
 	if (err) return `Evaluator error: ${err}`;
 	if (tool.exit_code) return `Evaluator exited with code ${tool.exit_code}`;
@@ -93,7 +93,7 @@ export function parsePythonResult(value: unknown): VerifyResult {
 	}
 	if (parsed && parsed.status) {
 		if (parsed.truncated) {
-			return withoutVerdict(parsed, String(parsed.reason || 'Evaluator payload was truncated — no verdict on partial retrieval'));
+			return withoutVerdict(parsed, String(parsed.reason || 'Evaluator payload was truncated - no verdict on partial retrieval'));
 		}
 		return parsed;
 	}

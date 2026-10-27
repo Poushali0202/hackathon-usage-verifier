@@ -3,7 +3,7 @@
 // =============================================================================
 
 /**
- * Judge Hack — V1 shell app. Product surfaces (dashboard, verify, runs, dossier)
+ * Judge Hack - V1 shell app. Product surfaces (dashboard, verify, runs, dossier)
  * invoke the tool_python evaluator pipeline directly; the LLM never writes the verdict.
  */
 
@@ -18,9 +18,12 @@ import {
 } from 'shell';
 import './app.css';
 import astronaut from './astronaut.svg';
-import { openCheckout } from './billing';
-import { BILLING_LIVE } from './entitlement';
+import { asPlanTier, openCheckout } from './billing';
+import { BILLING_LIVE, upgradeTier } from './entitlement';
 import CheckoutHost from './CheckoutHost';
+import ManageBillingHost from './ManageBillingHost';
+import { NarrationProvider } from './NarrationContext';
+import NarrationHost from './NarrationHost';
 import { NavProvider } from './NavContext';
 import Dashboard from './pages/Dashboard';
 import NewRun from './pages/NewRun';
@@ -47,7 +50,12 @@ const NAV: { id: View; label: string; short: string }[] = [
 const SidebarNav: React.FC<{ view: View; onView: (view: View, _run?: string, highlight?: string) => void }> = ({ view, onView }) => {
 	const { theme } = useJudgeTheme();
 	const collapsed = useSidebarCollapsed();
+	const { getPref } = usePrefs();
 	const current = view === 'rundetail' ? 'runs' : view;
+	// RunsProvider mirrors the resolved plan into hj.plan; this nav is portaled outside it.
+	const upgrade = upgradeTier(asPlanTier(getPref('hj.plan')));
+	// AppLayout portals this into host chrome, outside RunsProvider. Do not
+	// call useRuns here or the shell sidebar throws and the app never mounts.
 	return (
 		<div className={`jh-nav${collapsed ? ' is-collapsed' : ''}`} data-theme={theme}>
 			{NAV.map((item) => (
@@ -63,14 +71,14 @@ const SidebarNav: React.FC<{ view: View; onView: (view: View, _run?: string, hig
 			))}
 			<span className="grow" />
 			<SidebarCollapsedGate>
-				{BILLING_LIVE && (
+				{BILLING_LIVE && upgrade && (
 					<div className="upgrade">
 						<b>Upgrade your plan</b> <img className="astro" src={astronaut} alt="" /><br />
-						Git freshness checks and custom scoring.<br />
+						{upgrade.pitch}<br />
 						<button className="btn sm" type="button" style={{ marginTop: 9 }}
-							onClick={() => openCheckout()}>Subscribe →</button>
+							onClick={() => openCheckout(upgrade.tier)}>Upgrade to {upgrade.label} →</button>
 						<button className="btn ghost sm" type="button" style={{ marginTop: 8 }}
-							onClick={() => onView('pricing', undefined, 'company')}>See plans →</button>
+							onClick={() => onView('pricing', undefined, upgrade.tier)}>See plans →</button>
 					</div>
 				)}
 			</SidebarCollapsedGate>
@@ -133,16 +141,20 @@ const App: React.FC<ShellAppProps> = () => {
 	// session with "Sign in required" and can spin forever.
 	return (
 		<RunsProvider>
-			<ThemeProvider>
-				<NavProvider value={{ view, go, runId, highlight }}>
-					<AppLayout sidebar={<SidebarNav view={view} onView={go} />} showStatus>
-						<AppFrame view={view} onView={go}>
-							<Content view={view} />
-							<CheckoutHost />
-						</AppFrame>
-					</AppLayout>
-				</NavProvider>
-			</ThemeProvider>
+			<NarrationProvider>
+				<ThemeProvider>
+					<NavProvider value={{ view, go, runId, highlight }}>
+						<AppLayout sidebar={<SidebarNav view={view} onView={go} />} showStatus>
+							<AppFrame view={view} onView={go}>
+								<Content view={view} />
+								<CheckoutHost />
+								<ManageBillingHost />
+								<NarrationHost />
+							</AppFrame>
+						</AppLayout>
+					</NavProvider>
+				</ThemeProvider>
+			</NarrationProvider>
 		</RunsProvider>
 	);
 };

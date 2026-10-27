@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { paneTone } from '../src/components/Tower';
+import { loadBearingMark, paneTone } from '../src/components/Tower';
 import {
 	ARCHITECTURE_TEMPLATES,
 	inferArchitectureTemplate,
@@ -49,5 +49,24 @@ describe('scoringConfigForPlan', () => {
 	it('strips weights on Developer so the engine uses team defaults', () => {
 		expect(withoutUserRubric(custom)).toEqual({ types: ['code'] });
 		expect(scoringConfigForPlan(custom, 'developer').weights).toBeUndefined();
+	});
+});
+
+describe('loadBearingMark (QA D8)', () => {
+	it('never marks an absent layer, even when the template calls it load-bearing', () => {
+		expect(loadBearingMark('none', true, 'No')).toBe(false);
+		expect(loadBearingMark('none', true, 'Yes')).toBe(false);
+		expect(loadBearingMark('other', true, 'Yes')).toBe(false);
+	});
+	it('marks a target layer only when the verdict is not backbone No', () => {
+		expect(loadBearingMark('target', true, 'Yes')).toBe(true);
+		expect(loadBearingMark('target', true, 'Partial')).toBe(true);
+		expect(loadBearingMark('target', true, 'No')).toBe(false);
+		expect(loadBearingMark('target', false, 'Yes')).toBe(false);
+	});
+	it('every load-bearing template pane stays silent while not present', () => {
+		for (const t of Object.values(ARCHITECTURE_TEMPLATES)) {
+			for (const pane of t.panes) expect(loadBearingMark('none', pane.load_bearing, 'No')).toBe(false);
+		}
 	});
 });

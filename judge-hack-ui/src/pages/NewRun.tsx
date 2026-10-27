@@ -118,7 +118,7 @@ export default function NewRun() {
 				)}
 				{run.status === 'stopped' && (
 					<p className="muted" style={{ marginBottom: 14, fontSize: 13 }}>
-						Run stopped — {run.results.length}{run.total ? ` of ${run.total}` : ''} verified before the
+						Run stopped - {run.results.length}{run.total ? ` of ${run.total}` : ''} verified before the
 						stop; results below are kept.
 					</p>
 				)}
@@ -187,7 +187,7 @@ export default function NewRun() {
 								onDragLeave={() => setDrag(false)}
 								onDrop={(e) => { e.preventDefault(); setDrag(false); void onFile(e.dataTransfer.files[0] || null); }}>
 								<b>Drop your submissions sheet here</b> or click to browse.<br />
-								<span style={{ fontSize: 12.5 }}>Odd column layouts are fine — the sheet brain maps them.</span>
+								<span style={{ fontSize: 12.5 }}>Odd column layouts are fine - the sheet brain maps them.</span>
 								{file && <div><span className="filechip">{file.name}{rows.length ? ` · ${rows.length} repos` : ''}</span></div>}
 							</div>
 							<input ref={fileInput} type="file" accept=".csv,.xlsx,.xls,text/csv" hidden

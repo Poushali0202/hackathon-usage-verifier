@@ -1,44 +1,30 @@
 /**
- * Stage 3 storage probe: rocketride_sql SELECT 1 on staging.
+ * Storage probe: rocketride_sql SELECT 1 against the named target.
  * Never prints secret values. Does not use personal PG credentials.
  *
- *   node tools/sql-probe.mjs
+ * It deploys a pipe version, so the target must be named:
+ *   node tools/sql-probe.mjs --target staging
+ *   node tools/sql-probe.mjs --target cloud
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { assertTarget, devPair, findWorkspaceRoot, hostOf, loadWorkspaceEnv, requireTarget } from './env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
-const workspaceRoot = path.resolve(appRoot, '..', '..');
+const workspaceRoot = findWorkspaceRoot(appRoot);
 const require = createRequire(path.join(appRoot, 'package.json'));
 const { RocketRideClient } = require('rocketride');
 
-function loadEnv(file) {
-	if (!fs.existsSync(file)) return;
-	for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith('#')) continue;
-		const eq = trimmed.indexOf('=');
-		if (eq < 1) continue;
-		const key = trimmed.slice(0, eq).trim();
-		let val = trimmed.slice(eq + 1).trim();
-		if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-			val = val.slice(1, -1);
-		}
-		if (process.env[key] === undefined) process.env[key] = val;
-	}
-}
+loadWorkspaceEnv(path.join(workspaceRoot, '.env'));
 
-function mustEnv(name) {
-	const value = process.env[name];
-	if (!value) throw new Error(`Missing ${name} in workspace .env`);
-	return value;
-}
-
-loadEnv(path.join(workspaceRoot, '.env'));
+const target = requireTarget(process.argv.slice(2), 'the SQL probe (it deploys a pipe version)');
+const { uri: devUri, auth: devKey } = devPair();
+assertTarget(target, devUri, 'development connection');
+console.log(`[dev] host=${hostOf(devUri)} target=${target}`);
 
 const gen = spawnSync(process.execPath, [path.join(here, 'gen-pipes.mjs')], {
 	stdio: 'inherit',
@@ -47,7 +33,7 @@ const gen = spawnSync(process.execPath, [path.join(here, 'gen-pipes.mjs')], {
 if (gen.status !== 0) process.exit(gen.status || 1);
 
 const pipeline = JSON.parse(fs.readFileSync(path.join(appRoot, 'src', 'pipelines', 'hackjudge_sql_v1.pipe'), 'utf8'));
-const client = new RocketRideClient({ uri: mustEnv('ROCKETRIDE_URI'), auth: mustEnv('ROCKETRIDE_APIKEY') });
+const client = new RocketRideClient({ uri: devUri, auth: devKey });
 const info = await client.connect();
 console.log(`probe user=${info.email || info.userId} org=${info.organization?.name || info.organization?.id || 'none'}`);
 console.log(`pipe provider=${pipeline.components.find((c) => c.id === 'sql_1')?.provider} allow_execute=${pipeline.components.find((c) => c.id === 'sql_1')?.config?.default?.allow_execute}`);

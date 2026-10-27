@@ -56,6 +56,16 @@ export function paneTone(raw: string, load: boolean): 'core' | 'rr' | 'off' {
 	return load ? 'core' : 'rr';
 }
 
+/**
+ * "Load-bearing" is a claim about the target in THIS repo, so it needs all three: the
+ * template marks the layer as load-bearing, the layer is the target, and the verdict is
+ * not backbone No. The template flag alone only says "a layer that matters in this
+ * architecture" and must never render as a claim on an absent layer.
+ */
+export function loadBearingMark(raw: string, load: boolean, backbone?: string): boolean {
+	return load && raw === 'target' && backbone !== 'No';
+}
+
 /** Original 5-callout layout (spec §10.4): labels track the five plates, stay inside the scene. */
 function layoutCallouts(scene: HTMLElement | null) {
 	if (!scene) return;
@@ -147,7 +157,7 @@ export default function Tower({ layers, architecture, backbone, label = 'RocketR
 					{stack.map((p, i) => (
 						<div
 							key={p.id}
-							className={`pane p${i} ${paneTone(p.raw, p.load)}`}
+							className={`pane p${i} ${paneTone(p.raw, loadBearingMark(p.raw, p.load, backbone))}`}
 							data-layer={4 - i}
 							data-pane={p.id}
 						/>
@@ -155,11 +165,12 @@ export default function Tower({ layers, architecture, backbone, label = 'RocketR
 				</div>
 				<svg className="leaders" />
 				{topFirst.map((p, ci) => {
+					const lb = loadBearingMark(p.raw, p.load, backbone);
 					const info = p.raw === 'target'
-						? { load: p.load, dot: p.load ? 'dot-core' : 'dot-rr', tech: label }
+						? { dot: lb ? 'dot-core' : 'dot-rr', tech: label }
 						: p.raw === 'other'
-							? { load: p.load, dot: 'dot-other', tech: 'other platform' }
-							: { load: p.load, dot: 'dot-none', tech: 'not present' };
+							? { dot: 'dot-other', tech: 'other platform' }
+							: { dot: 'dot-none', tech: 'not present' };
 					return (
 						<div className="callout" key={p.id} data-ci={ci}>
 							<span className={`cdot ${info.dot}`} />
@@ -167,7 +178,7 @@ export default function Tower({ layers, architecture, backbone, label = 'RocketR
 								<div className="cname">{p.label}</div>
 								<div className="ctech">
 									{info.tech}
-									{info.load && <span className={`lb ${p.raw === 'target' ? 'on' : 'off'}`}>Load-bearing</span>}
+									{lb && <span className="lb on">Load-bearing</span>}
 								</div>
 							</div>
 						</div>

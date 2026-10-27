@@ -8,7 +8,7 @@ GitHub evidence.
 The app is fully hosted by RocketRide. Each verification invokes the catalog `tool_python`
 node (`hackjudge_python_v1.pipe`) once per repository: the pinned deterministic evaluator
 runs in-process on the RocketRide engine (RestrictedPython) and reads the repository over
-the GitHub REST API and `raw.githubusercontent.com` — repository metadata, the recursive
+the GitHub REST API and `raw.githubusercontent.com` - repository metadata, the recursive
 git tree, the files the rubric needs, and commit dates. Nothing is cloned and nothing is
 written to disk; there is no sandbox. The LLM never writes the tag, backbone, or score.
 The pipeline fails closed for inaccessible, truncated, or incomplete repositories.
@@ -29,7 +29,8 @@ flattens it (via `tools/build_restricted_bundle.py`) into
 
 Prepaid metering is a hard stop: Developer 4 MB, Company 20 MB, Organizers 40 MB at $5/MB
 (average repo 500 KB). A run that would exceed remaining allowance is truncated; an empty
-balance refuses the next verification. Stripe auto-recharge is not wired yet.
+balance refuses the next verification. Upgrading to the next plan is how you add capacity.
+Developer includes 2 custom targets (Company and Organizers are uncapped).
 
 Surfaces: Dashboard, Targets (RocketRide preset plus custom products), New run (CSV batch),
 Quick verify, Runs (dossier grid + backbone tower), Settings, Plans. Runs and custom targets
@@ -39,12 +40,12 @@ Personal Postgres is not used. SQL rows and the workspace cache are private to t
 signed-in `userId`.
 
 Identity comes from the shell (`useAuthUser()`). Every run and target write is stamped with
-the signed-in user. Theme, view, and plan fallback live in `usePrefs()` — not `localStorage`.
+the signed-in user. Theme, view, and plan fallback live in `usePrefs()` - not `localStorage`.
 
-Billing is `subscription` mode. Plans (Developer $20 / Company $100 / Organizers $200) are
-declared on the manifest; checkout is the shell billing modal (`shell:subscribe`). Entitlements
-come from `useSubscriptions()`. Runtime settings `hackjudge.judge-hack.graceDays` and
-`hackjudge.judge-hack.historyPenalty` are contributed on the manifest and edited in Settings.
+Billing is Store subscription checkout (`mode: subscription`), the same plate as Converge:
+Developer $20 / Company $100 / Organizers $200 per month. Runtime settings
+`hackjudge.judge-hack.graceDays` and `hackjudge.judge-hack.historyPenalty` are contributed
+on the manifest and edited in Settings.
 
 Custom targets use a team default SDK & platform rubric (eight signals). Organizers
 describe the product. Company and Organizers plans may change that target’s weights
@@ -54,8 +55,8 @@ templates only rename the five-layer backbone plates.
 V1 accepts public GitHub repositories (private ones work when the judge's token can read
 them). Credentials:
 
-- `ROCKETRIDE_ANTHROPIC_KEY` — org-scope RocketRide environment secret, explain pipe only.
-- `ROCKETRIDE_GITHUB_TOKEN` — per judge, user scope, entered in the app's Settings.
+- `ROCKETRIDE_ANTHROPIC_KEY` - org-scope RocketRide environment secret, explain pipe only.
+- `ROCKETRIDE_GITHUB_TOKEN` - per judge, user scope, entered in the app's Settings.
 
 Migration notes: [docs/BINDINGS.md](./docs/BINDINGS.md), [docs/CONTRACT.md](./docs/CONTRACT.md),
 [docs/MIGRATION-NOTES.md](./docs/MIGRATION-NOTES.md).

@@ -19,7 +19,7 @@ export const ARCHITECTURE_TEMPLATES: Record<ArchTemplateId, { label: string; hin
 	},
 	data_platform: {
 		label: 'Data / gateway platform',
-		hint: 'BaaS, streams, vector stores. Complementary infra — not RocketRide retrieval layers.',
+		hint: 'BaaS, streams, vector stores. Complementary infra - not RocketRide retrieval layers.',
 		panes: [
 			{ id: 'install', label: 'Package installed', signal: 'dependency', load_bearing: false },
 			{ id: 'config', label: 'Platform config', signal: 'artifact', load_bearing: false },

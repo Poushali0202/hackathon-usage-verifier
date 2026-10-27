@@ -6,7 +6,7 @@ import type { PythonToolClient } from './pythonInvoke';
  * The evaluator (RestrictedPython inside the catalog `tool_python` node) decides which
  * URLs it needs; when the engine's sandbox forbids `urllib` it answers `need_fetch` with
  * the exact URLs. The app fetches those over the catalog `tool_http_request` node in the
- * same pipe — GET only, the judge's own GitHub token as bearer for GitHub hosts — and
+ * same pipe - GET only, the judge's own GitHub token as bearer for GitHub hosts - and
  * re-runs the evaluator with the bodies as CACHE. Nothing is cloned, nothing is fetched
  * from the browser, and the app never chooses evidence: it only forwards what Python asks.
  */
@@ -18,16 +18,19 @@ export const FETCH_CONCURRENCY = 6;
 export const MAX_REPLAY_ROUNDS = 8;
 /** Hard cap on the cache literal shipped into one tool_python call. */
 export const MAX_CACHE_BYTES = 12 * 1024 * 1024;
-export const CACHE_TOO_LARGE_REASON = 'Repository evidence exceeds the in-engine evaluation limit (12 MB) — no verdict on partial retrieval';
-export const REPLAY_ROUNDS_REASON = 'Evaluator kept requesting more evidence than the fetch budget allows — no verdict on partial retrieval';
+export const CACHE_TOO_LARGE_REASON = 'Repository evidence exceeds the in-engine evaluation limit (12 MB) - no verdict on partial retrieval';
+export const REPLAY_ROUNDS_REASON = 'Evaluator kept requesting more evidence than the fetch budget allows - no verdict on partial retrieval';
 
 const GH_SEG = '[A-Za-z0-9_.-]+';
 const GITHUB_API_REPO = new RegExp(`^https://api\\.github\\.com/repos/(${GH_SEG})/(${GH_SEG})(?:[/?#]|$)`, 'i');
+// A renamed repo's 301 body points at /repositories/{id}; the follow-up fetch is the same
+// GitHub API and needs the same bearer, or it runs into the shared-IP anonymous rate limit.
+const GITHUB_API_REPO_ID = /^https:\/\/api\.github\.com\/repositories\/\d+(?:[/?#]|$)/i;
 const GITHUB_RAW_REPO = new RegExp(`^https://raw\\.githubusercontent\\.com/(${GH_SEG})/(${GH_SEG})/`, 'i');
 const RETRY_STATUSES = new Set([429, 500, 502, 503]);
 const UA = 'hackjudge-python-v1';
 
-/** {url: [status, body]} — status 0 means the request never completed. */
+/** {url: [status, body]} - status 0 means the request never completed. */
 export type FetchCache = Record<string, [number, string]>;
 export type Fetcher = (url: string) => Promise<[number, string]>;
 
@@ -49,7 +52,7 @@ function asStatusBody(value: unknown): [number, string] {
 export function githubBearerUrl(url: string): boolean {
 	const u = String(url || '').trim();
 	if (!u || /[\s\\]/.test(u) || /^https:\/\/[^/]*@/i.test(u)) return false;
-	return GITHUB_API_REPO.test(u) || GITHUB_RAW_REPO.test(u);
+	return GITHUB_API_REPO.test(u) || GITHUB_API_REPO_ID.test(u) || GITHUB_RAW_REPO.test(u);
 }
 
 /** GET through `http_1`; GitHub repo hosts get the judge's token, everything else goes bare. */

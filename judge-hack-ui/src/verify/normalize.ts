@@ -65,9 +65,9 @@ export function normalizeResult(raw: VerifyResult, row: Submission, seconds: num
 	const fetchIncomplete = status === 'fetch_incomplete' || !!raw.truncated;
 	const noVerdict = !complete || fetchIncomplete || sandboxError || !!raw.truncated;
 	const failReason = reasonText
-		|| (fetchIncomplete ? 'Evidence fetch was incomplete — no verdict on partial retrieval' : '')
-		|| (sandboxError ? 'Evaluator returned an incomplete payload — no verdict' : '')
-		|| (!complete ? 'Verification did not finish — no verdict' : '');
+		|| (fetchIncomplete ? 'Evidence fetch was incomplete - no verdict on partial retrieval' : '')
+		|| (sandboxError ? 'Evaluator returned an incomplete payload - no verdict' : '')
+		|| (!complete ? 'Verification did not finish - no verdict' : '');
 	const called = typeof raw.pipelines_called === 'number'
 		? raw.pipelines_called
 		: (Array.isArray(raw.pipelines) ? raw.pipelines.filter((p) => p.called).length : 0);

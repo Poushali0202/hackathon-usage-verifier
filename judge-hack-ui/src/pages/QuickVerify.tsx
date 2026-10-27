@@ -48,7 +48,7 @@ export default function QuickVerify() {
 	function actuallyVerify() {
 		setError('');
 		const repoName = repos[0].split('/').slice(-1)[0] || 'repo';
-		const runName = repos.length === 1 ? `Quick verify — ${repoName}` : `Quick verify — ${repos.length} repos`;
+		const runName = repos.length === 1 ? `Quick verify - ${repoName}` : `Quick verify - ${repos.length} repos`;
 		try {
 			const id = startBatch({
 				name: runName,
@@ -122,7 +122,7 @@ export default function QuickVerify() {
 			{!!run?.results?.length && (
 				<div style={{ marginTop: 18 }}>
 					<ResultsGrid results={run.results} total={run.total} summary={run.summary}
-						exportName="quick-verify.xlsx" />
+						runId={run.id} exportName="quick-verify.xlsx" />
 					<p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
 						Saved to <button className="linkish" type="button" onClick={() => go('runs')}>Runs</button> like any verification, so the dossier stays on record.
 					</p>

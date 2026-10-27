@@ -1,12 +1,14 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { useAuthUser, usePrefs, useShellConnection, useSubscriptions, useWorkspace } from 'shell';
+import { useAuthUser, usePrefs, useShellConnection, useShellEvent, useSubscriptions, useWorkspace } from 'shell';
 import {
 	APP_ID,
 	SETTING_GRACE_DAYS,
 	SETTING_HISTORY_PENALTY,
 	SETTING_STORE_VARIANT,
+	asPlanTier,
+	planFromNickname,
 } from './billing';
-import { BILLING_LIVE, resolvePlan } from './entitlement';
+import { BILLING_LIVE, canCreateCustomTarget, resolvePlan } from './entitlement';
 import { countsFromResults, summarize } from './format';
 import { actorFrom } from './identity';
 import type { JudgeSettings, StoredRun, StoreStatus, Submission, TargetRecord, VerifyResult } from './types';
@@ -23,6 +25,7 @@ import {
 	readTenantMeterKb,
 	readTenantRuns,
 	readTenantTargets,
+	readOrgMeterKb,
 	resultTotal,
 	runFingerprint,
 	settleOrphanedRuns,
@@ -59,7 +62,7 @@ type RunsApi = {
 	store: StoreStatus;
 	saveSettings: (next: Partial<JudgeSettings>) => void;
 	getRun: (id: string) => StoredRun | undefined;
-	saveTarget: (target: TargetRecord) => void;
+	saveTarget: (target: TargetRecord) => boolean;
 	deleteTarget: (id: string) => void;
 	startBatch: (opts: StartOpts) => string;
 	stop: () => void;
@@ -67,9 +70,13 @@ type RunsApi = {
 	makeOrgLease: (kind: string) => OrgLease;
 	/** null = not checked yet; false = no usable token (missing, or the env read failed). */
 	githubTokenReady: boolean | null;
-	/** Set when getEnv failed — distinct from "judge never saved a token". */
+	/** Set when getEnv failed - distinct from "judge never saved a token". */
 	githubTokenError: string | null;
 	refreshGithubToken: () => Promise<boolean>;
+	/** Re-read the subscribed plan after checkout. Optional nickname is applied immediately. */
+	refreshBilling: (hint?: { planNickname?: string | null }) => Promise<void>;
+	/** Replace one stored result (prose only). Verdict fields must already be locked by the caller. */
+	patchResult: (runId: string, index: number, result: VerifyResult) => void;
 };
 
 const Ctx = createContext<RunsApi | null>(null);
@@ -114,6 +121,9 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 	const [runs, setRuns] = useState<StoredRun[]>(() => asRuns(appState, ownerUserId));
 	const [targets, setTargets] = useState<TargetRecord[]>(() => asTargets(appState, ownerUserId));
 	const [meterKb, setMeterKb] = useState(() => consumedKbFromRuns(asRuns(appState, ownerUserId)));
+	// The allowance is org-wide: other members' consumption (from their tenant
+	// bags in the shared app state) draws down the same prepaid balance.
+	const [othersMeterKb, setOthersMeterKb] = useState(() => readOrgMeterKb(appState, ownerUserId));
 	if (meterRef.current == null) meterRef.current = meterKb;
 	const [store, setStore] = useState<StoreStatus>({ kind: 'appState', ready: false });
 	const [githubTokenReady, setGithubTokenReady] = useState<boolean | null>(null);
@@ -141,8 +151,84 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 	const billingStatus = getStatus(APP_ID);
 	const billedApp = desktopApps.find((a) => a.id === APP_ID);
-	const prefPlan = getPref('hj.plan') === 'developer' ? 'developer' : 'company';
-	const plan = resolvePlan(billingStatus, billedApp, prefPlan);
+	const prefPlan = asPlanTier(getPref('hj.plan')) || 'developer';
+	const [planNickname, setPlanNickname] = useState<string | null>(null);
+	const planNicknameRef = useRef<string | null>(null);
+	const pendingPlanRef = useRef<string | null>(null);
+	planNicknameRef.current = planNickname;
+
+	const samePlanNick = useCallback((a?: string | null, b?: string | null) => {
+		const pa = planFromNickname(a);
+		const pb = planFromNickname(b);
+		if (pa && pb) return pa === pb;
+		return String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+	}, []);
+
+	const readPlanNickname = useCallback(async (): Promise<string | null> => {
+		const orgId = user?.organization?.id;
+		const billing = (client as {
+			billing?: { getDetails: (id: string) => Promise<Array<{ appId?: string; planNickname?: string | null }>> };
+		} | null)?.billing;
+		if (!orgId || !billing || !isConnected) return null;
+		const rows = await billing.getDetails(orgId);
+		return (rows || []).find((r) => r.appId === APP_ID)?.planNickname ?? null;
+	}, [client, isConnected, user?.organization?.id]);
+
+	const applyPlanNickname = useCallback((nick: string | null) => {
+		if (!nick) return;
+		planNicknameRef.current = nick;
+		setPlanNickname(nick);
+	}, []);
+
+	const refreshBilling = useCallback(async (hint?: { planNickname?: string | null }) => {
+		if (hint?.planNickname) {
+			pendingPlanRef.current = hint.planNickname;
+			applyPlanNickname(hint.planNickname);
+		}
+		const want = pendingPlanRef.current;
+		const attempts = want ? 10 : 1;
+		for (let i = 0; i < attempts; i++) {
+			try {
+				const nick = await readPlanNickname();
+				if (!nick) {
+					/* keep the optimistic nickname until Stripe settles */
+				} else if (want) {
+					if (samePlanNick(nick, want)) {
+						applyPlanNickname(nick);
+						pendingPlanRef.current = null;
+						return;
+					}
+				} else {
+					applyPlanNickname(nick);
+					return;
+				}
+			} catch {
+				/* keep the optimistic nickname until Stripe settles */
+			}
+			if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 400));
+		}
+	}, [applyPlanNickname, readPlanNickname, samePlanNick]);
+
+	useEffect(() => {
+		let cancelled = false;
+		readPlanNickname()
+			.then((nick) => {
+				if (cancelled) return;
+				const want = pendingPlanRef.current;
+				if (want && nick && !samePlanNick(nick, want)) return;
+				if (want && nick && samePlanNick(nick, want)) pendingPlanRef.current = null;
+				applyPlanNickname(nick);
+			})
+			.catch(() => { if (!cancelled && !pendingPlanRef.current) applyPlanNickname(null); });
+		return () => { cancelled = true; };
+	}, [readPlanNickname, applyPlanNickname, samePlanNick, billingStatus]);
+
+	useShellEvent('shell:accountUpdate', () => { void refreshBilling(); });
+	useShellEvent('shell:appsUpdated', () => { void refreshBilling(); });
+	const plan = resolvePlan(billingStatus, { ...billedApp, planNickname }, prefPlan);
+	useEffect(() => {
+		if (getPref('hj.plan') !== plan) setPref('hj.plan', plan);
+	}, [plan, getPref, setPref]);
 	const storeVariant: StoreVariant = wsSettings[SETTING_STORE_VARIANT] === 'external' ? 'external' : 'default';
 
 	const settings: JudgeSettings = {
@@ -150,7 +236,7 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 		history_penalty: asNumber(wsSettings[SETTING_HISTORY_PENALTY] ?? getPref('hj.history_penalty'), 2),
 		plan,
 		billingStatus,
-		meter_kb_used: meterKb,
+		meter_kb_used: meterKb + othersMeterKb,
 	};
 
 	const persistAppState = useCallback((nextRuns: StoredRun[], nextTargets: TargetRecord[]) => {
@@ -219,6 +305,14 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 		scheduleSqlUpsert(stamped);
 	}, [actor, ownerUserId, persistAppState, scheduleSqlUpsert]);
 
+	const patchResult = useCallback((runId: string, index: number, result: VerifyResult) => {
+		const current = (liveRef.current?.id === runId ? liveRef.current : undefined)
+			|| runsRef.current.find((r) => r.id === runId);
+		if (!current) return;
+		const results = current.results.map((row, i) => (i === index ? result : row));
+		writeRun({ ...current, results, ...countsFromResults(results), summary: summarize(results) });
+	}, [writeRun]);
+
 	const hydrateResults = useCallback((id: string) => {
 		const opened = sqlRef.current;
 		if (!opened) return;
@@ -250,8 +344,9 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 		})();
 	}, []);
 
-	const saveTarget = useCallback((target: TargetRecord) => {
-		if (target.is_preset || target.id === ROCKETRIDE_PRESET.id) return;
+	const saveTarget = useCallback((target: TargetRecord): boolean => {
+		if (target.is_preset || target.id === ROCKETRIDE_PRESET.id) return false;
+		if (!canCreateCustomTarget(plan, targetsRef.current, target.id)) return false;
 		const now = new Date().toISOString();
 		const existing = targetsRef.current.find((t) => t.id === target.id);
 		const stamped: TargetRecord = stampOwner({
@@ -267,6 +362,7 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 			return next;
 		});
 		if (sqlRef.current) void sqlRef.current.upsertTarget(stamped);
+		return true;
 	}, [actor, ownerUserId, persistAppState, plan]);
 
 	const deleteTarget = useCallback((id: string) => {
@@ -378,6 +474,7 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 	}, [client, isConnected, ownerUserId, storeVariant, flushSqlUpsert]);
 
 	useEffect(() => {
+		setOthersMeterKb(readOrgMeterKb(appState, ownerUserId));
 		if (!store.ready) return;
 		const localRuns = asRuns(appState, ownerUserId);
 		const localTargets = asTargets(appState, ownerUserId).filter((t) => !t.is_preset);
@@ -442,9 +539,12 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 		if (abortRef.current) throw new Error('A verification is already running. Stop it before starting another.');
 		if (githubTokenError) throw new Error(GITHUB_ENV_READ_REASON);
 		if (githubTokenReady === false) throw new Error(GITHUB_TOKEN_MISSING_REASON);
-		const used = consumedKbFromRuns(runsRef.current);
-		meterRef.current = used;
-		setMeterKb(used);
+		const own = consumedKbFromRuns(runsRef.current);
+		meterRef.current = own;
+		setMeterKb(own);
+		// Gate on the org-wide total, read fresh: the allowance is shared, so
+		// what teammates already verified counts against this batch too.
+		const used = own + readOrgMeterKb(appStateRef.current, ownerUserId);
 		const gate = BILLING_LIVE
 			? gateBatch(plan, used, opts.repos.length)
 			: { maxRepos: opts.repos.length, remaining_kb: Number.POSITIVE_INFINITY, truncated: false, blocked: false, reason: '' };
@@ -559,8 +659,8 @@ export const RunsProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 	const api = useMemo<RunsApi>(() => ({
 		runs, targets, settings, store, saveSettings, getRun, saveTarget, deleteTarget, startBatch, stop, hydrateResults, makeOrgLease,
-		githubTokenReady, githubTokenError, refreshGithubToken,
-	}), [runs, targets, settings.grace_days, settings.history_penalty, settings.plan, settings.billingStatus, settings.meter_kb_used, store, getRun, saveTarget, deleteTarget, startBatch, stop, hydrateResults, makeOrgLease, githubTokenReady, githubTokenError, refreshGithubToken]);
+		githubTokenReady, githubTokenError, refreshGithubToken, refreshBilling, patchResult,
+	}), [runs, targets, settings.grace_days, settings.history_penalty, settings.plan, settings.billingStatus, settings.meter_kb_used, store, getRun, saveTarget, deleteTarget, startBatch, stop, hydrateResults, makeOrgLease, githubTokenReady, githubTokenError, refreshGithubToken, refreshBilling, patchResult]);
 
 	return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 };

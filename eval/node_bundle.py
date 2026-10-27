@@ -54,6 +54,8 @@ def build_bundle() -> str:
     pieces = [_extract(engine_src, a) for a in (
         "EVENT_GRACE_DAYS", "DEFAULT_HISTORY_PENALTY", "_MANIFEST", "_SRC_EXT",
         "_TECH_EXT", "_TECH_FRAMEWORKS",
+        "_PIPE_HINT", "_JSON_PIPE_PATH", "_JSON_CONFIG",
+        "def parse_pipe", "def _looks_like_pipeline",
         "def event_window", "def history_tamper_scan", "def detect_tech",
         "def _gh_languages",
     )]
@@ -70,6 +72,7 @@ def build_bundle() -> str:
     return "\n".join([
         "import json",
         "import re",
+        "from urllib.parse import quote",
         "",
         rb_parse,
         rb_others,

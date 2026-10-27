@@ -27,7 +27,11 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 APP_ROOT = HERE.parent
-EVAL_ROOT = APP_ROOT.parent.parent / "Projects" / "hackathon-usage-verifier" / "eval"
+# The app lives inside the verifier repo (judge-hack-ui/ beside eval/); fall back to the
+# workspace layout (apps/judge-hack-ui beside Projects/) for an older checkout.
+_REPO_EVAL = APP_ROOT.parent / "eval"
+EVAL_ROOT = _REPO_EVAL if _REPO_EVAL.is_dir() else (
+    APP_ROOT.parent.parent / "Projects" / "hackathon-usage-verifier" / "eval")
 VERIFY_ROOT = APP_ROOT / "src" / "verify"
 
 PREFIX = "hj_"

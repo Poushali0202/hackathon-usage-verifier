@@ -15,18 +15,30 @@ describe('actorFrom', () => {
 });
 
 describe('planFromSubscription', () => {
-	it('maps live entitlements from nickname / features', () => {
-		expect(planFromSubscription('subscribed', { stripePrices: [{ nickname: 'Organizers' }] }, 'developer')).toBe('organizers');
+	it('maps the subscribed nickname, not catalog stripePrices[0]', () => {
+		const catalog = {
+			stripePrices: [{ nickname: 'Company' }, { nickname: 'Organizers' }, { nickname: 'Developer' }],
+			features: ['core-scoring', 'excel-export'],
+			planNickname: 'Developer',
+		};
+		expect(planFromSubscription('subscribed', catalog, 'company')).toBe('developer');
+		expect(planFromSubscription('subscribed', { planNickname: 'Organizers' }, 'developer')).toBe('organizers');
 		expect(planFromSubscription('trialing', { features: ['git-freshness'] }, 'developer')).toBe('company');
-		expect(planFromSubscription('subscribed', { stripePrices: [{ nickname: 'Developer' }] }, 'company')).toBe('developer');
+	});
+	it('does not treat the product catalog as the subscribed plan', () => {
+		expect(planFromSubscription('subscribed', {
+			stripePrices: [{ nickname: 'Company' }],
+			features: ['core-scoring', 'excel-export'],
+		}, 'company')).toBe('developer');
 	});
 	it('drops canceled / past_due to Developer', () => {
 		expect(planFromSubscription('canceled', { stripePrices: [{ nickname: 'Company' }] }, 'company')).toBe('developer');
 		expect(planFromSubscription('past_due', undefined, 'company')).toBe('developer');
 	});
-	it('keeps the workspace usable before Store prices exist', () => {
+	it('uses the fallback only when there is no subscription yet', () => {
 		expect(planFromSubscription('free', undefined, 'company')).toBe('company');
 		expect(planFromSubscription(undefined, undefined, 'developer')).toBe('developer');
+		expect(planFromSubscription('auth', undefined, 'organizers')).toBe('organizers');
 	});
 	it('treats Organizers as Company-gated', () => {
 		expect(isCompanyPlan('developer')).toBe(false);

@@ -24,7 +24,7 @@ describe('readGithubToken', () => {
 	it('returns empty when the key is absent (successful empty read)', async () => {
 		expect(await readGithubToken(envClient(async () => ({ ROCKETRIDE_ANTHROPIC_KEY: 'x' })))).toBe('');
 	});
-	it('throws GithubEnvReadError when getEnv fails — not "no token"', async () => {
+	it('throws GithubEnvReadError when getEnv fails - not "no token"', async () => {
 		await expect(readGithubToken(envClient(async () => { throw new Error('network down'); })))
 			.rejects.toBeInstanceOf(GithubEnvReadError);
 		await expect(readGithubToken(envClient(async () => { throw new Error('network down'); })))

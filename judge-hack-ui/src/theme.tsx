@@ -21,7 +21,7 @@ function readStored(getPref: (k: string) => unknown): JudgeTheme {
 
 function applyDomTheme(theme: JudgeTheme) {
 	const root = document.documentElement;
-	// Phase-2 used html[data-theme]; do not set that here — RocketRide's
+	// Phase-2 used html[data-theme]; do not set that here - RocketRide's
 	// shell tokens live as inline --rr-* properties, and a bare data-theme
 	// flip only lightened text against the beige canvas.
 	if (root.dataset.theme === 'light' || root.dataset.theme === 'dark') {

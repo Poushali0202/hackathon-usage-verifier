@@ -43,7 +43,7 @@ export default function RunDetail() {
 				{run.status === 'stopped' && ' · this run was stopped; results below are what completed'}
 			</p>
 			<ResultsGrid results={run.results || []} total={run.total} summary={run.summary}
-				exportName={`${run.name.replace(/\s+/g, '_')}.xlsx`} />
+				runId={run.id} exportName={`${run.name.replace(/\s+/g, '_')}.xlsx`} />
 		</Page>
 	);
 }

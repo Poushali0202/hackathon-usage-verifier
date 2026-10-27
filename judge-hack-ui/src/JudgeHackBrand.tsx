@@ -1,7 +1,7 @@
 import React from 'react';
 import astronaut from './astronaut.svg';
 
-/** Judge Hack mark — astronaut hopping the rocket. */
+/** Judge Hack mark - astronaut hopping the rocket. */
 export function JudgeHackIcon({ size = 52 }: { size?: number }) {
 	return (
 		<img

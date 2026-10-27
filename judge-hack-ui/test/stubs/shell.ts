@@ -1,4 +1,4 @@
-/** Vitest stub — the real `'shell'` package is provided by the host at runtime. */
+/** Vitest stub - the real `'shell'` package is provided by the host at runtime. */
 export type ConnectResult = {
 	userId?: string;
 	email?: string;

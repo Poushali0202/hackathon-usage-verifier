@@ -40,7 +40,7 @@ export function resultMetersKb(result: Pick<VerifyResult, 'reason' | 'status'>):
 	if (/^Evaluator error:/i.test(reason)) return 0;
 	if (/evaluator timed out/i.test(reason)) return 0;
 	if (/included compute is busy/i.test(reason)) return 0;
-	// Evaluator crashes and missing repos never produced scored code — do not drain prepaid.
+	// Evaluator crashes and missing repos never produced scored code - do not drain prepaid.
 	if (/TypeError|AttributeError|NameError|gather\(\) takes/i.test(reason)) return 0;
 	if (/GitHub returned HTTP 404/i.test(reason)) return 0;
 	if (status && status !== 'complete' && /takes from \d+ to \d+ positional arguments/i.test(reason)) return 0;

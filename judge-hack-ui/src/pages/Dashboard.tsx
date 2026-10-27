@@ -49,7 +49,7 @@ export default function Dashboard() {
 				</div>
 			) : (
 				<div className="notice" style={{ marginBottom: 16 }}>
-					Preview is waiting on the RocketRide connection. Use the left nav for Targets, New run, Quick verify, and Runs — then Retry the banner at the top if it is still showing.
+					Preview is waiting on the RocketRide connection. Use the left nav for Targets, New run, Quick verify, and Runs - then Retry the banner at the top if it is still showing.
 				</div>
 			)}
 			<div className="stats">
@@ -66,7 +66,7 @@ export default function Dashboard() {
 					<div style={{ padding: '10px 16px 26px', textAlign: 'center' }}>
 						<img className="astro lg" src={astronaut} alt="" style={{ height: 44 }} />
 						<p className="muted" style={{ fontSize: 13.5 }}>
-							No runs yet. Start your first verification — upload a submissions sheet or paste repo URLs.
+							No runs yet. Start your first verification - upload a submissions sheet or paste repo URLs.
 						</p>
 							<button className="btn sm" type="button" onClick={() => go('newrun')}>New run</button>
 					</div>

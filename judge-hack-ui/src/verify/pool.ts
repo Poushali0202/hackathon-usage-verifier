@@ -41,7 +41,7 @@ export function workerTtlSeconds(repoCount: number, workers: number): number {
 
 /**
  * Task tokens are keyed by project_id + source. Two client.use() calls with the
- * same pipe identity return "Pipeline is already running" — the pool would
+ * same pipe identity return "Pipeline is already running" - the pool would
  * silently drop to one worker. Give each worker a fresh project_id.
  */
 export function clonePipelineForWorker<T extends { project_id?: string }>(pipeline: T): T {

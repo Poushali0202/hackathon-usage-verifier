@@ -4,6 +4,7 @@ import {
 	countsFromResults,
 	estimateAllowance,
 	genericScoreMath,
+	judgeArrow,
 	GENERIC_TAG_THRESHOLDS,
 	isFlagged,
 	runDuration,
@@ -96,5 +97,13 @@ describe('scoringSummary / flags / allowance', () => {
 			score: 5, tag: 'Significant', backbone: 'Yes',
 			pipelines: [{ called: true }, { called: false }],
 		})).toContain('1/2 pipeline(s) called');
+	});
+});
+
+describe('judgeArrow (QA D4)', () => {
+	it('renders stored ASCII notes with the same arrow as live summaries', () => {
+		expect(judgeArrow('Deterministic score 4.5 -> Significant / backbone Yes; 1/1 pipeline(s) called.'))
+			.toBe('Deterministic score 4.5 → Significant / backbone Yes; 1/1 pipeline(s) called.');
+		expect(judgeArrow('a->b')).toBe('a->b');
 	});
 });

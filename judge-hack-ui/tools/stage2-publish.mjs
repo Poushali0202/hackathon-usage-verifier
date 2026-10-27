@@ -1,28 +1,39 @@
 /**
- * Stage 2: validate pipes against staging, deploy them with deployTo,
- * then verifyApp → addApp → poll buildStatus → publishApp @me.
+ * Stage 2: validate pipes against the development connection, deploy them with
+ * deployTo, then verifyApp → addApp → poll buildStatus → publishApp @me.
  *
- * Uses the workspace .env. Never prints secret values. Does not call
- * setSchedule. Does not copy credentials into the org overlay.
+ * Validation reads, so it uses the dev pair. Everything that writes — pipes,
+ * app, publish — uses the DEPLOY pair, and the target has to be named, because
+ * `.env` follows whichever backend the App Builder extension last connected to
+ * and nothing in a successful run would otherwise say which instance answered.
+ *
+ * Never prints secret values. Does not call setSchedule. Does not copy
+ * credentials into the org overlay. Never publishes @team or @public (review
+ * and team rungs live in team-share.mjs).
  *
  * Run from anywhere:
- *   node apps/judge-hack-ui/tools/stage2-publish.mjs
+ *   node apps/judge-hack-ui/tools/stage2-publish.mjs --target staging
+ *   node apps/judge-hack-ui/tools/stage2-publish.mjs --target cloud --app-id <prod id>
+ *   node apps/judge-hack-ui/tools/stage2-publish.mjs --validate-only
  *
- * Flags: --validate-only  --skip-pipes  --skip-app
+ * Flags: --target <cloud|staging|local>  --validate-only  --verify-only
+ *        --skip-pipes  --skip-app  --app-id <id>  --comment <text>
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_APP_ID, namespaceOf, patchAppId, resolveAppId } from './app-id.mjs';
+import { assertTarget, deployPair, devPair, findWorkspaceRoot, hostOf, loadWorkspaceEnv, requireTarget, targetOf } from './env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(here, '..');
-const workspaceRoot = path.resolve(appRoot, '..', '..');
+const workspaceRoot = findWorkspaceRoot(appRoot);
 const require = createRequire(path.join(appRoot, 'package.json'));
 const { RocketRideClient } = require('rocketride');
 
-const APP_ID = 'hackjudge.judge-hack';
+const APP_ID = resolveAppId();
 const REQUIRED_PROVIDERS = [
 	'chat',
 	'agent_rocketride',
@@ -43,39 +54,21 @@ const PIPE_FILES = [
 	'hackjudge_sql_v1.pipe',
 ];
 
-const args = new Set(process.argv.slice(2));
+const argv = process.argv.slice(2);
+const args = new Set(argv);
 const validateOnly = args.has('--validate-only');
 const verifyOnly = args.has('--verify-only');
 const skipPipes = args.has('--skip-pipes');
 const skipApp = args.has('--skip-app');
 
-function loadEnv(file) {
-	if (!fs.existsSync(file)) return;
-	for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
-		const trimmed = line.trim();
-		if (!trimmed || trimmed.startsWith('#')) continue;
-		const eq = trimmed.indexOf('=');
-		if (eq < 1) continue;
-		const key = trimmed.slice(0, eq).trim();
-		let val = trimmed.slice(eq + 1).trim();
-		if (
-			(val.startsWith('"') && val.endsWith('"'))
-			|| (val.startsWith("'") && val.endsWith("'"))
-		) {
-			val = val.slice(1, -1);
-		}
-		if (process.env[key] === undefined) process.env[key] = val;
-	}
-}
+const DEFAULT_COMMENT = 'tool_python + tool_http_request replay: no Daytona, no clone, per-judge GitHub token';
+const commentIndex = argv.indexOf('--comment');
+const appComment = commentIndex !== -1 && argv[commentIndex + 1] && !argv[commentIndex + 1].startsWith('--')
+	? argv[commentIndex + 1]
+	: DEFAULT_COMMENT;
 
 function sleep(ms) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function mustEnv(name) {
-	const value = process.env[name];
-	if (!value) throw new Error(`Missing ${name} in workspace .env`);
-	return value;
 }
 
 function runGen(script) {
@@ -109,6 +102,7 @@ function catalogNames() {
 }
 
 async function connectClient(uri, auth, label) {
+	console.log(`[${label}] host=${hostOf(uri)} target=${targetOf(uri) || 'unrecognised'}`);
 	const client = new RocketRideClient({ uri, auth });
 	const info = await client.connect();
 	const org = info.organization;
@@ -151,11 +145,23 @@ async function pollBuild(client, versionHint) {
 	throw new Error(`Timed out waiting for ${APP_ID} buildStatus=ok`);
 }
 
-loadEnv(path.join(workspaceRoot, '.env'));
+loadWorkspaceEnv(path.join(workspaceRoot, '.env'));
 
 const failures = [];
+const readOnly = validateOnly || verifyOnly;
 
 try {
+	// Settle the target and both hosts before anything else runs. A refusal
+	// should cost nothing — not a regenerated tree, and certainly not a
+	// four-minute server build.
+	const target = readOnly ? null : requireTarget(argv, 'deploying Judge Hack');
+	const { uri: devUri, auth: devKey } = devPair();
+	const deployConnInfo = readOnly ? null : deployPair();
+	if (target) {
+		assertTarget(target, devUri, 'development connection');
+		assertTarget(target, deployConnInfo.uri, 'deployment target');
+	}
+
 	runGen('gen-evaluator-bundle.mjs');
 	runGen('gen-pipes.mjs');
 
@@ -176,15 +182,11 @@ try {
 		failures.push(`catalog missing provider ${provider}`);
 	}
 
-	const devUri = mustEnv('ROCKETRIDE_URI');
-	const devKey = mustEnv('ROCKETRIDE_APIKEY');
-	const { client: dev, info, developerId, teams } = await connectClient(devUri, devKey, 'dev');
+	const devConn = await connectClient(devUri, devKey, 'dev');
+	const dev = devConn.client;
 
-	if (!developerId) {
-		failures.push('identity probe: organization.developerId is null');
-	}
-	if (developerId && developerId !== 'hackjudge') {
-		console.log(`Note: org developerId is "${developerId}"; app id is ${APP_ID}`);
+	if (APP_ID !== DEFAULT_APP_ID) {
+		console.log(`App id override: ${APP_ID} (tree default ${DEFAULT_APP_ID}); patched for the pack only`);
 	}
 
 	if (!skipPipes) {
@@ -223,16 +225,32 @@ try {
 		process.exit(0);
 	}
 
-	if (!process.env.ROCKETRIDE_DEPLOY_URI || !process.env.ROCKETRIDE_DEPLOY_APIKEY) {
-		throw new Error('No deployment target configured — ROCKETRIDE_DEPLOY_URI / ROCKETRIDE_DEPLOY_APIKEY missing.');
-	}
-
-	const deployUri = process.env.ROCKETRIDE_DEPLOY_URI;
-	const deployKey = process.env.ROCKETRIDE_DEPLOY_APIKEY;
+	const { uri: deployUri, auth: deployKey } = deployConnInfo;
 	const sameConn = deployUri === devUri && deployKey === devKey;
-	const { client: deploy } = sameConn
-		? { client: dev }
-		: await connectClient(deployUri, deployKey, 'deploy');
+	// Identity, developer namespace and teams all have to come from the
+	// instance being written to. Reading them off the dev connection works
+	// only while the two pairs agree, and fails silently when they do not.
+	const deployConn = sameConn ? devConn : await connectClient(deployUri, deployKey, 'deploy');
+	const { client: deploy, info: deployInfo, developerId, teams } = deployConn;
+
+	if (!developerId) {
+		failures.push(`identity probe on the deployment target: organization.developerId is null`);
+	}
+	// An app id outside the organization's developer namespace registers nothing
+	// the org can own: the Deploy tab goes read-only on "Nothing is deployed yet".
+	const wantNamespace = namespaceOf(APP_ID);
+	if (developerId && developerId !== wantNamespace) {
+		failures.push(
+			`app id ${APP_ID} is outside this organization's developer namespace "${developerId}"`
+			+ ` — re-run with --app-id ${developerId}.<app> (or connect the org that owns "${wantNamespace}")`,
+		);
+	}
+	if (failures.length) {
+		if (!sameConn) await deploy.disconnect();
+		await dev.disconnect();
+		console.error('\nStage 2 refused before any write:\n' + failures.join('\n'));
+		process.exit(1);
+	}
 
 	let envNames = [];
 	try {
@@ -247,8 +265,16 @@ try {
 		console.log(`Pipe secrets missing from overlay (owner must set, not this script): ${missing.join(', ')}`);
 	}
 
-	const teamId = process.env.ROCKETRIDE_DEPLOY_TEAM || info.devTeam || teams[0]?.id;
-	if (!teamId) throw new Error('No team id for deployTo (set ROCKETRIDE_DEPLOY_TEAM or join a team).');
+	const teamId = process.env.ROCKETRIDE_DEPLOY_TEAM || deployInfo.devTeam || teams[0]?.id;
+	if (!teamId) throw new Error('No team id for deployTo (set ROCKETRIDE_DEPLOY_TEAM or join a team on the deployment target).');
+	// Only assert when the connection actually enumerated teams; some orgs
+	// return them from listTeams instead, and an empty list is not evidence.
+	if (teams.length && !teams.some((t) => t.id === teamId)) {
+		throw new Error(
+			`Team ${teamId} is not a team on the deployment target (${hostOf(deployUri)}).`
+			+ ' ROCKETRIDE_DEPLOY_TEAM holds an id from another instance.',
+		);
+	}
 	console.log(`deployTo team=${teamId}`);
 
 	if (!skipPipes && !failures.length) {
@@ -271,34 +297,41 @@ try {
 	}
 
 	if (!skipApp && !failures.length) {
-		const report = await deploy.deploy.verifyApp(appRoot, { workspaceRoot });
-		for (const check of report.checks || []) {
-			console.log(`verifyApp ${check.ok ? 'ok' : 'FAIL'} ${check.id}: ${check.note}`);
-			if (!check.ok) failures.push(`verifyApp ${check.id}: ${check.note}`);
-		}
-		if (!report.ok) {
-			failures.push(`verifyApp failed (${report.fileCount} files, ${report.uncompressedBytes} bytes)`);
-		} else {
-			console.log(`verifyApp ok files=${report.fileCount} bytes=${report.uncompressedBytes}`);
-			const added = await deploy.deploy.addApp(appRoot, {
-				workspaceRoot,
-				comment: 'tool_python + tool_http_request replay: no Daytona, no clone, per-judge GitHub token',
-				onProgress: (line) => console.log(line),
-			});
-			const versionHint = added.artifact?.version ?? added.artifact?.registryVersion;
-			console.log(`addApp uploaded version=${versionHint ?? '?'}; polling server build…`);
-			const latest = await pollBuild(deploy, versionHint);
-			const published = await deploy.publishApp(APP_ID, latest.registryVersion, '@me');
-			console.log(`publishApp @me v${latest.registryVersion}`, published?.publish ? 'ok' : '');
-			try {
-				const pins = await deploy.whereApp(APP_ID);
-				console.log('whereApp:');
-				for (const row of pins || []) {
-					console.log(`  ${row.rung}\t${row.handle}\tv${row.version}\t${row.state}`);
-				}
-			} catch (err) {
-				console.log('whereApp:', err instanceof Error ? err.message : err);
+		// The id must be the connected instance's inside the pack; the tree keeps
+		// the staging id, so patch for the pack and restore however this exits.
+		const restoreAppId = patchAppId(appRoot, APP_ID);
+		try {
+			const report = await deploy.deploy.verifyApp(appRoot, { workspaceRoot });
+			for (const check of report.checks || []) {
+				console.log(`verifyApp ${check.ok ? 'ok' : 'FAIL'} ${check.id}: ${check.note}`);
+				if (!check.ok) failures.push(`verifyApp ${check.id}: ${check.note}`);
 			}
+			if (!report.ok) {
+				failures.push(`verifyApp failed (${report.fileCount} files, ${report.uncompressedBytes} bytes)`);
+			} else {
+				console.log(`verifyApp ok files=${report.fileCount} bytes=${report.uncompressedBytes}`);
+				const added = await deploy.deploy.addApp(appRoot, {
+					workspaceRoot,
+					comment: appComment,
+					onProgress: (line) => console.log(line),
+				});
+				const versionHint = added.artifact?.version ?? added.artifact?.registryVersion;
+				console.log(`addApp uploaded version=${versionHint ?? '?'}; polling server build…`);
+				const latest = await pollBuild(deploy, versionHint);
+				const published = await deploy.publishApp(APP_ID, latest.registryVersion, '@me');
+				console.log(`publishApp @me v${latest.registryVersion}`, published?.publish ? 'ok' : '');
+				try {
+					const pins = await deploy.whereApp(APP_ID);
+					console.log('whereApp:');
+					for (const row of pins || []) {
+						console.log(`  ${row.rung}\t${row.handle}\tv${row.version}\t${row.state}`);
+					}
+				} catch (err) {
+					console.log('whereApp:', err instanceof Error ? err.message : err);
+				}
+			}
+		} finally {
+			restoreAppId();
 		}
 	}
 

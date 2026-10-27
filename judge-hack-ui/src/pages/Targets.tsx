@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { usePrefs, useShellConnection } from 'shell';
 import { isCompanyPlan } from '../billing';
 import { GithubTokenNotice, Page, TagPill, TierLockModal, OrgBusyModal } from '../components/bits';
+import { canCreateCustomTarget, CUSTOM_TARGET_CAP_MESSAGE, customTargetCapUi, duplicateTargetName } from '../entitlement';
+import { useNav } from '../NavContext';
 import { ROCKETRIDE_PRESET, useRuns } from '../RunsContext';
 import type { ExtractedTarget, TargetRecord, VerifyResult } from '../types';
 import { requireGithubToken, type EnvClient } from '../verify/githubToken';
@@ -17,7 +19,7 @@ import { normalizeGithub } from '../verify/sheet';
 
 const LASERDATA_SAMPLE_REPO = 'https://github.com/laserdata/laser-sdk';
 
-/** Deterministic LaserData target — tokens from the public SDK (npm/PyPI/crates), not LLM-invented. */
+/** Deterministic LaserData target - tokens from the public SDK (npm/PyPI/crates), not LLM-invented. */
 const LASERDATA_CONFIG: Record<string, unknown> = {
 	types: ['code', 'platform', 'api'],
 	architecture_template: 'data_platform',
@@ -65,7 +67,7 @@ const PLATFORM_FIELDS: FieldDef[] = [
 
 const OTHER_FIELDS: FieldDef[] = [
 	['competitors', 'Who else would count as a competing product?', 'If we see these instead, it is not your backbone.', 'e.g. rival-sdk'],
-	['neutral', 'Tools that should never count against them', 'Complementary infra (databases, auth) — not rivals.', 'e.g. supabase, firebase'],
+	['neutral', 'Tools that should never count against them', 'Complementary infra (databases, auth) - not rivals.', 'e.g. supabase, firebase'],
 ];
 
 const SCORE_SIGNALS: [string, string, number, string][] = [
@@ -113,9 +115,12 @@ async function readUploads(files: File[]): Promise<Record<string, string>> {
 
 export default function Targets() {
 	const { targets, saveTarget, deleteTarget, settings, makeOrgLease } = useRuns();
+	const { go } = useNav();
 	const { client, isConnected } = useShellConnection();
 	const { setPref } = usePrefs();
 	const canTuneScore = isCompanyPlan(settings.plan);
+	const capUi = customTargetCapUi(settings.plan, targets);
+	const laserdataExisting = targets.find((t) => t.id === 'laserdata' || t.name.trim().toLowerCase() === 'laserdata');
 	const [selId, setSelId] = useState(targets[0]?.id || ROCKETRIDE_PRESET.id);
 	const [draft, setDraft] = useState<TargetRecord | null>(null);
 	const [tab, setTab] = useState<'code' | 'hosted' | 'score'>('code');
@@ -188,6 +193,10 @@ export default function Targets() {
 		if (kind === 'platform' && next.includes('platform')) setTab('hosted');
 		else setTab('code');
 		if (readOnly && sel) {
+			if (!canCreateCustomTarget(settings.plan, targets)) {
+				setMsg(CUSTOM_TARGET_CAP_MESSAGE);
+				return;
+			}
 			const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
 				? crypto.randomUUID()
 				: `target-${Date.now()}`;
@@ -203,7 +212,7 @@ export default function Targets() {
 					architecture: ARCHITECTURE_TEMPLATES[inferred].panes,
 				},
 			});
-			setMsg('Started a custom target. Save it to use in runs — the RocketRide preset stays as-is.');
+			setMsg('Started a custom target. Save it to use in runs - the RocketRide preset stays as-is.');
 			return;
 		}
 		set('types', next);
@@ -228,6 +237,10 @@ export default function Targets() {
 	}
 
 	function startNew() {
+		if (!canCreateCustomTarget(settings.plan, targets)) {
+			setMsg(CUSTOM_TARGET_CAP_MESSAGE);
+			return;
+		}
 		const id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `target-${Date.now()}`;
 		const created: TargetRecord = {
 			id,
@@ -262,7 +275,11 @@ export default function Targets() {
 			setDraft(null);
 			setSelId(existing.id);
 			setPref('hj.targetId', existing.id);
-			setMsg('LaserData target selected. Test it on the sample repo below — or pick it on Quick verify / New run.');
+			setMsg('LaserData target selected. Test it on the sample repo below - or pick it on Quick verify / New run.');
+			return;
+		}
+		if (!canCreateCustomTarget(settings.plan, targets)) {
+			setMsg(CUSTOM_TARGET_CAP_MESSAGE);
 			return;
 		}
 		const created: TargetRecord = {
@@ -271,7 +288,10 @@ export default function Targets() {
 			is_preset: false,
 			config: { ...LASERDATA_CONFIG },
 		};
-		saveTarget(created);
+		if (!saveTarget(created)) {
+			setMsg(CUSTOM_TARGET_CAP_MESSAGE);
+			return;
+		}
 		setPref('hj.targetId', created.id);
 		setDraft(null);
 		setSelId(created.id);
@@ -290,11 +310,15 @@ export default function Targets() {
 		const current = draft || sel;
 		if (!current || current.is_preset) return;
 		if (!current.name.trim()) { setMsg('Give the target a name.'); return; }
+		if (duplicateTargetName(targets, current.name, current.id)) {
+			setMsg(`A target named "${current.name.trim()}" already exists - give this one a different name.`);
+			return;
+		}
 		const cfg = { ...current.config };
 		const nextArch = inferArchitectureTemplate(cfg.types, cfg.architecture_template);
 		const keepCustom = Array.isArray(cfg.architecture)
 			&& !isStockArchitecture(cfg.architecture, inferArchitectureTemplate(cfg.types, cfg.architecture_template));
-		saveTarget({
+		if (!saveTarget({
 			...current,
 			name: current.name.trim(),
 			is_preset: false,
@@ -305,11 +329,14 @@ export default function Targets() {
 					? cfg.architecture
 					: ARCHITECTURE_TEMPLATES[nextArch].panes,
 			},
-		});
+		})) {
+			setMsg(CUSTOM_TARGET_CAP_MESSAGE);
+			return;
+		}
 		setPref('hj.targetId', current.id);
 		setDraft(null);
 		setSelId(current.id);
-		setMsg('Saved — this target is live for new runs');
+		setMsg('Saved - this target is live for new runs');
 		setTimeout(() => setMsg((m) => (m.startsWith('Saved') ? '' : m)), 3500);
 	}
 
@@ -440,8 +467,15 @@ export default function Targets() {
 						{t.name}{t.is_preset ? ' (preset)' : ''}
 					</button>
 				))}
-				<button className="btn ghost sm" type="button" onClick={startNew}>New target</button>
-				<button className="btn ghost sm" type="button" onClick={loadLaserdataExample}>Use LaserData example</button>
+				<button className="btn ghost sm" type="button" onClick={startNew} disabled={capUi.disabled}>New target</button>
+				<button className="btn ghost sm" type="button" onClick={loadLaserdataExample}
+					disabled={capUi.disabled && !laserdataExisting}>Use LaserData example</button>
+				{capUi.message && (
+					<span className="flagcell" style={{ fontSize: 13, alignSelf: 'center' }}>
+						{capUi.message}{' '}
+						<button className="linkish" type="button" onClick={() => go('pricing')}>See plans</button>
+					</span>
+				)}
 			</div>
 			<div className="glass" style={{ padding: 22, maxWidth: 820 }}>
 				{!readOnly && (
@@ -450,7 +484,7 @@ export default function Targets() {
 							<b style={{ fontSize: 13.5 }}>Start from the product’s public surface</b>
 							<div className="help" style={{ marginTop: 2 }}>
 								Paste a GitHub repo, optional docs URL, package name, or files, then click
-								Fill from sources. Filling never starts until you click — so you can complete every field first.
+								Fill from sources. Filling never starts until you click - so you can complete every field first.
 							</div>
 							<div className="jh-extract-grid">
 								<input className="xin" type="text" placeholder="https://github.com/vendor/product"
@@ -486,7 +520,7 @@ export default function Targets() {
 						{(suggestions.competitors || suggestions.neutral) && (
 							<div style={{ marginTop: 8 }}>
 								{suggestions.competitors && (
-									<div>Suggested competitors (not verified — click to add):{' '}
+									<div>Suggested competitors (not verified - click to add):{' '}
 										{suggestions.competitors.split(',').map((s) => s.trim()).filter(Boolean).map((s) => (
 											<button key={s} type="button"
 												className={`techchip${hasSuggestion('competitors', s) ? ' target' : ''}`}
@@ -597,7 +631,7 @@ export default function Targets() {
 							<div className="detailbox" style={{ fontSize: 13 }}>
 								The RocketRide preset uses a fixed pipeline rubric (committed .pipe files,
 								agent/LLM nodes, and whether those pipelines are invoked). Save a custom target
-								to judge an SDK, data platform, API, or host — and, on Company or Organizers,
+								to judge an SDK, data platform, API, or host - and, on Company or Organizers,
 								to set the point scale for that product.
 							</div>
 						) : (
@@ -605,7 +639,7 @@ export default function Targets() {
 								<p className="muted" style={{ fontSize: 13, margin: '2px 0 12px' }}>
 									{canTuneScore
 										? 'This target starts on the team default scale. Change points and tag cut-offs to match how you want this event judged.'
-										: 'This is the default scale for every custom target. Company and Organizers can raise or lower it per product — for example, reward a live deploy more than an import.'}
+										: 'This is the default scale for every custom target. Company and Organizers can raise or lower it per product - for example, reward a live deploy more than an import.'}
 								</p>
 								{canTuneScore && (
 									<div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '0 0 10px' }}>
@@ -689,7 +723,7 @@ export default function Targets() {
 														<b className="scorecell">{typical.toFixed(1)}</b>
 														{' → '}<TagPill tag={tag} />
 														{tag === 'None' || tag === 'Less'
-															? ' — that bar is likely too high for real projects to clear.' : ''}
+															? ' - that bar is likely too high for real projects to clear.' : ''}
 													</div>
 												</div>
 											);
@@ -724,7 +758,7 @@ export default function Targets() {
 						<div className="section-kicker">Test on a sample repo</div>
 						<div className="help" style={{ marginTop: 0, marginBottom: 8 }}>
 							Paste a repo you know used this product. If the checks fire, the definition works.
-							Reads the repository through the GitHub API with your token — nothing is cloned.
+							Reads the repository through the GitHub API with your token - nothing is cloned.
 						</div>
 						<div style={{ display: 'flex', gap: 8 }}>
 							<input className="xin" style={{ flex: 1 }} type="text"
@@ -744,7 +778,7 @@ export default function Targets() {
 												<span className="techchip target" style={{ margin: 0 }}>Ran on RocketRide</span>
 											</span>
 											<div className="flagcell" style={{ marginTop: 8, whiteSpace: 'normal' }}>
-												{String(tRes.reason || tRes.notes || 'Verification did not finish — no verdict.')}
+												{String(tRes.reason || tRes.notes || 'Verification did not finish - no verdict.')}
 											</div>
 										</>
 									) : (
@@ -757,7 +791,7 @@ export default function Targets() {
 										</span>
 										<div style={{ marginTop: 8 }}>
 											{(tRes.breakdown || []).length === 0
-												? <span className="flagcell">No signals fired — this definition does not
+												? <span className="flagcell">No signals fired - this definition does not
 													detect that repo. Check package names and how code calls the product.</span>
 												: (tRes.breakdown || []).map((b, i) => (
 													<span key={i} className={`bdchip ${b.points < 0 ? 'neg' : 'pos'}`}>
@@ -780,7 +814,7 @@ export default function Targets() {
 			<TierLockModal open={lockOpen} onClose={() => setLockOpen(false)} title="Custom scoring is a Company and Organizers feature">
 				<p>Developer uses the team default scale so a first target is just “what is this product.”
 					<b> Company</b> and <b>Organizers</b> can change point values and Significant / Moderate / Less
-					cut-offs per target — for example, a deploy-first sponsor vs an SDK-first library.</p>
+					cut-offs per target - for example, a deploy-first sponsor vs an SDK-first library.</p>
 			</TierLockModal>
 			<OrgBusyModal open={orgBusyOpen} onClose={() => setOrgBusyOpen(false)} />
 		</Page>

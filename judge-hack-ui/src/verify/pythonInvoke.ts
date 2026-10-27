@@ -5,7 +5,7 @@ import { makeHttpFetcher, runWithReplay, type FetchCache } from './replay';
 /**
  * The evaluator runs in the catalog `tool_python` node (RestrictedPython,
  * in-process on the RocketRide engine). GitHub is read over the REST/raw API
- * with the judge's own token — no sandbox, no git clone, nothing on disk.
+ * with the judge's own token - no sandbox, no git clone, nothing on disk.
  * When the engine forbids `urllib` the evaluator asks for URLs and the app
  * fetches them over the catalog `tool_http_request` node (see replay.ts).
  */

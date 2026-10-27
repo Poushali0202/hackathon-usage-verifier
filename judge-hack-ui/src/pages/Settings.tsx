@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthUser, usePrefs, useShellConnection } from 'shell';
-import { openAccount, openCheckout } from '../billing';
+import { openAccount, openCheckout, openEnvironment } from '../billing';
 import { BILLING_LIVE } from '../entitlement';
 import { Page } from '../components/bits';
 import { formatDataKb, planBudgetKb, remainingKb } from '../verify/meter';
@@ -16,8 +16,10 @@ import {
 	writeGithubTokenAudit,
 	type EnvClient,
 } from '../verify/githubToken';
+import { useNarration } from '../NarrationContext';
 import { useNav } from '../NavContext';
 import { useRuns } from '../RunsContext';
+import { ANTHROPIC_KEY_NAME, NARRATION_COPY } from '../verify/narration';
 
 function GithubAccessCard() {
 	const { client, isConnected } = useShellConnection();
@@ -79,16 +81,16 @@ function GithubAccessCard() {
 				{githubTokenReady == null
 					? <span className="muted">checking…</span>
 					: githubTokenError
-						? <b style={{ color: 'var(--err, #c0392b)' }}>could not read environment — runs are blocked</b>
+						? <b style={{ color: 'var(--err, #c0392b)' }}>could not read environment - runs are blocked</b>
 						: githubTokenReady
 							? <b>your token is saved</b>
-							: <b style={{ color: 'var(--err, #c0392b)' }}>no token — runs are blocked</b>}
+							: <b style={{ color: 'var(--err, #c0392b)' }}>no token - runs are blocked</b>}
 			</p>
 			{audit && (
 				<p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>{formatGithubTokenAudit(audit)}</p>
 			)}
 			<p className="muted" style={{ fontSize: 12.5, margin: '0 0 10px' }}>
-				Required to read submission repositories. Saved to your account only — this box stays
+				Required to read submission repositories. Saved to your account only - this box stays
 				empty after save. A fine-grained token with read-only Contents and Metadata is enough.
 			</p>
 			<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -112,6 +114,57 @@ function GithubAccessCard() {
 			{msg && (
 				<p className={msg.kind === 'err' ? 'dqline' : 'muted'} style={{ margin: '10px 0 0', fontSize: 12.5 }}>{msg.text}</p>
 			)}
+		</div>
+	);
+}
+
+function NarrationCard() {
+	const { narrationOn, busy, checkAgain, checking, checkError } = useNarration();
+	const [copied, setCopied] = useState(false);
+	const on = narrationOn === true;
+	const pill = narrationOn == null
+		? NARRATION_COPY.statusChecking
+		: on ? NARRATION_COPY.statusOn : NARRATION_COPY.statusOff;
+
+	const copyName = async () => {
+		try {
+			await navigator.clipboard.writeText(ANTHROPIC_KEY_NAME);
+			setCopied(true);
+			window.setTimeout(() => setCopied(false), 1500);
+		} catch {
+			setCopied(false);
+		}
+	};
+
+	return (
+		<div className="glass" style={{ padding: 20 }}>
+			<div className="jh-narration-card-head">
+				<div className="section-kicker" style={{ marginBottom: 0 }}>{NARRATION_COPY.settingsTitle}</div>
+				<span className={`jh-status-pill ${on ? 'on' : 'off'}`}>{pill}</span>
+			</div>
+			<p style={{ margin: '12px 0 6px' }}>
+				<b>{on ? NARRATION_COPY.settingsOn : NARRATION_COPY.settingsOff}</b>
+			</p>
+			<p className="muted" style={{ margin: '0 0 14px', fontSize: 13 }}>
+				{on ? NARRATION_COPY.settingsOnBody : NARRATION_COPY.settingsOffBody}
+			</p>
+			<div className="jh-keychip">
+				<code>{ANTHROPIC_KEY_NAME}</code>
+				<button className="btn ghost sm" type="button" onClick={() => void copyName()}>
+					{copied ? 'Copied' : NARRATION_COPY.copyName}
+				</button>
+			</div>
+			<div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+				<button className="btn sm" type="button" disabled={busy} onClick={() => openEnvironment()}>
+					{NARRATION_COPY.openEnv}
+				</button>
+				{!on && (
+					<button className="btn ghost sm" type="button" disabled={checking} onClick={() => void checkAgain()}>
+						{checking ? 'Checking…' : NARRATION_COPY.checkAgain}
+					</button>
+				)}
+			</div>
+			{checkError && <p className="dqline" style={{ margin: '12px 0 0' }}>{checkError}</p>}
 		</div>
 	);
 }
@@ -148,6 +201,8 @@ export default function Settings() {
 				</div>
 
 				<GithubAccessCard />
+
+				<NarrationCard />
 
 				{BILLING_LIVE && (
 					<div className="glass" style={{ padding: 20 }}>

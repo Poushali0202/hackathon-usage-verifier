@@ -50,17 +50,25 @@ def run_verify(job, token, cache=None):
             return {"schema": VERIFY_SCHEMA, "status": "unverifiable", "repo_url": repo_url,
                     "reason": "URL not parseable", "mode": mode}
         owner, repo = pr[0], pr[1]
-        status, body = get("https://api.github.com/repos/%s/%s" % (owner, repo))
+        # follow_repo_redirect (engine, flat namespace): resolves a renamed/transferred repo
+        # (GitHub 301/302) and rebinds owner/repo, instead of failing the verdict on HTTP 301.
+        status, body, owner, repo = follow_repo_redirect(get, owner, repo)
         if missing:
             return need_fetch(VERIFY_SCHEMA, missing, {"repo_url": repo_url})
         if status in (401, 403, 429):
             return {"schema": VERIFY_SCHEMA, "status": "fetch_incomplete", "repo_url": repo_url,
                     "http_status": status, "github_token_present": token_present, "mode": mode,
                     "reason": "GitHub API rate limited or forbidden (HTTP %s)" % status}
+        if status in (301, 302, 307, 308):
+            return {"schema": VERIFY_SCHEMA, "status": "unverifiable", "repo_url": repo_url,
+                    "http_status": status, "mode": mode,
+                    "reason": "Repository was renamed or moved (HTTP %s) and the new location "
+                              "could not be resolved - paste its new URL" % status}
         if status != 200:
             return {"schema": VERIFY_SCHEMA, "status": "unverifiable", "repo_url": repo_url,
                     "http_status": status, "reason": "GitHub returned HTTP %s" % status, "mode": mode}
         meta = json.loads(body)
+        resolved_url = "https://github.com/%s/%s" % (owner, repo)
         branch = meta.get("default_branch", "main")
         tree_status, tree_body = get("https://api.github.com/repos/%s/%s/git/trees/%s?recursive=1"
                                      % (owner, repo, quote(branch)))
@@ -81,7 +89,7 @@ def run_verify(job, token, cache=None):
         if custom:
             tname = custom.get("name") or "Target"
             tgt = target_from_ui_config(tname, custom)
-        ev = gather(repo_url, get, event_date or None, history_penalty, tgt)
+        ev = gather(resolved_url, get, event_date or None, history_penalty, tgt)
         head_status, head_body = get("https://api.github.com/repos/%s/%s/commits/%s"
                                      % (owner, repo, quote(branch)))
         if missing:

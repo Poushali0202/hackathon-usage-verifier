@@ -8,6 +8,10 @@ export type ExplainProse = {
 	team_members?: string;
 	explain_failed?: boolean;
 	explain_error?: string;
+	/** Present only if the model echoed a verdict. Used to reject contradictions. */
+	tag?: string;
+	backbone?: string;
+	score?: number;
 };
 
 const PROSE_KEYS = ['description', 'rocketride_usage', 'justification'] as const;
@@ -85,6 +89,9 @@ function pickProse(obj: Record<string, unknown>): ExplainProse {
 		justification: obj.justification != null ? String(obj.justification) : '',
 		project_name: obj.project_name != null ? String(obj.project_name) : '',
 		team_members: obj.team_members != null ? String(obj.team_members) : '',
+		tag: obj.tag != null ? String(obj.tag) : undefined,
+		backbone: obj.backbone != null ? String(obj.backbone) : undefined,
+		score: obj.score != null && Number.isFinite(Number(obj.score)) ? Number(obj.score) : undefined,
 	};
 }
 
@@ -95,6 +102,9 @@ export function sanitizeExplainProse(prose: ExplainProse): ExplainProse {
 		justification: clip(String(prose.justification || ''), MAX.justification),
 		project_name: clip(String(prose.project_name || ''), MAX.project_name),
 		team_members: clip(String(prose.team_members || ''), MAX.team_members),
+		tag: prose.tag,
+		backbone: prose.backbone,
+		score: prose.score,
 	};
 	for (const key of PROSE_KEYS) {
 		const value = next[key] || '';
@@ -154,7 +164,7 @@ function pushPayloads(into: unknown[], value: unknown): void {
 	into.push(lifted);
 }
 
-/** Prefer `answers` (Python client shape). Never flatten the whole envelope — that
+/** Prefer `answers` (Python client shape). Never flatten the whole envelope - that
  *  concatenates UUIDs and the echoed prompt and breaks JSON brace matching. */
 export function chatAnswerPayloads(resp: unknown): unknown[] {
 	const out: unknown[] = [];

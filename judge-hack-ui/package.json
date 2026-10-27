@@ -24,7 +24,7 @@
           "nickname": "Developer",
           "amountCents": 2000,
           "currency": "usd",
-          "interval": "one_time",
+          "interval": "month",
           "metadata": {
             "order": 1,
             "description": "4 MB included · about 8 repos. Core scoring, Excel export, batches up to 10 repos.",
@@ -38,7 +38,7 @@
           "nickname": "Company",
           "amountCents": 10000,
           "currency": "usd",
-          "interval": "one_time",
+          "interval": "month",
           "metadata": {
             "order": 2,
             "description": "20 MB included · about 40 repos. Git freshness, custom scoring, batches up to 250 repos.",
@@ -54,10 +54,28 @@
           "nickname": "Organizers",
           "amountCents": 20000,
           "currency": "usd",
-          "interval": "one_time",
+          "interval": "month",
           "metadata": {
             "order": 3,
             "description": "40 MB included · about 80 repos. Unlimited targets, live streaming, API access.",
+            "features": [
+              "core-scoring",
+              "excel-export",
+              "git-freshness",
+              "custom-rubric",
+              "organizers"
+            ]
+          }
+        },
+        {
+          "nickname": "Organizers Early Access",
+          "amountCents": 0,
+          "currency": "usd",
+          "interval": "month",
+          "metadata": {
+            "order": 4,
+            "kind": "promo_base",
+            "description": "Hackathon early access. Full Organizers features, unlocked only by a promo code.",
             "features": [
               "core-scoring",
               "excel-export",
@@ -99,17 +117,17 @@
   "scripts": {
     "dev": "rsbuild dev",
     "gen": "node tools/gen-evaluator-bundle.mjs && node tools/gen-pipes.mjs",
-    "test": "npm run gen && vitest run && python \"../../Projects/hackathon-usage-verifier/eval/test_stage1.py\"",
+    "test": "npm run gen && vitest run && node tools/stage1-tests.mjs",
     "typecheck": "tsc --noEmit",
-    "build": "npm run gen && tsc --noEmit && vitest run && python \"../../Projects/hackathon-usage-verifier/eval/test_stage1.py\" && rsbuild build",
+    "build": "npm run gen && tsc --noEmit && vitest run && node tools/stage1-tests.mjs && rsbuild build",
     "stage2": "node tools/stage2-publish.mjs",
     "sql-probe": "node tools/sql-probe.mjs"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "rocketride": "file:../../.rocketride/client/rocketride.tgz",
-    "shell": "file:../../.rocketride/shell/shell.tgz",
+    "rocketride": "file:vendor/rocketride.tgz",
+    "shell": "file:vendor/shell.tgz",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

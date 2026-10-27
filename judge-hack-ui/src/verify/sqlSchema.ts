@@ -1,5 +1,6 @@
 import type { ActorStamp, StoredRun, TargetRecord, VerifyResult } from '../types';
 import { countsFromResults, summarize } from '../format';
+import { consumedKbFromRuns } from './meter';
 
 export const SQL_NODE_ID = 'sql_1';
 export const MAX_SQL_RUNS = 40;
@@ -74,7 +75,7 @@ export const SCHEMA_MIGRATIONS = [
 	`CREATE INDEX IF NOT EXISTS hj_sandbox_leases_expires_idx ON hj_sandbox_leases (expires_at)`,
 ];
 
-/** Metadata columns only — a 30-repo results JSONB on SELECT * is dropped by the execute payload cap. */
+/** Metadata columns only - a 30-repo results JSONB on SELECT * is dropped by the execute payload cap. */
 export const RUN_META_COLUMNS = [
 	'id', 'name', 'event_date', 'history_penalty', 'target_id', 'target_name',
 	'status', 'total', 'summary', 'significant_count', 'flagged_count', 'done_count',
@@ -175,6 +176,44 @@ export function readTenantMeterKb(appState: Record<string, unknown>, userId: str
 	const bag = asTenantBag(appState, userId);
 	const n = Number(bag?.meter_kb_used);
 	return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+/**
+ * Organization-wide consumption: the prepaid allowance belongs to the org,
+ * so every member's usage draws down the same balance ("Alice used 15 MB,
+ * 5 left for everyone"). Runs stay private per user; only the KB number
+ * aggregates across tenant bags.
+ *
+ * Per bag the contribution is max(durable meter_kb_used, re-derived from the
+ * bag's runs): the durable counter survives run trimming, the derivation
+ * catches bags written before the counter existed. Pre-tenancy legacy rows
+ * count when their owner has no bag (a bag already covers its owner), and
+ * unstamped rows always count: overcounting fails closed, undercounting
+ * gives away paid capacity.
+ */
+export function readOrgMeterKb(appState: Record<string, unknown>, excludeUserId?: string): number {
+	let total = 0;
+	const tenant = asObject(appState.tenant) || {};
+	const baggedUsers = new Set<string>();
+	for (const [uid, raw] of Object.entries(tenant)) {
+		const bag = asObject(raw);
+		if (!bag) continue;
+		baggedUsers.add(uid);
+		if (excludeUserId && uid === excludeUserId) continue;
+		const durable = Number(bag.meter_kb_used);
+		const persisted = Number.isFinite(durable) && durable > 0 ? Math.floor(durable) : 0;
+		const derived = Array.isArray(bag.runs) ? consumedKbFromRuns(bag.runs as StoredRun[]) : 0;
+		total += Math.max(persisted, derived);
+	}
+	const legacy = Array.isArray(appState.runs) ? appState.runs as StoredRun[] : [];
+	const legacyCounted = legacy.filter((row) => {
+		const owner = ownerIdOf(row as { owner_user_id?: string; created_by?: ActorStamp });
+		if (!owner) return true;
+		if (excludeUserId && owner === excludeUserId) return false;
+		return !baggedUsers.has(owner);
+	});
+	total += consumedKbFromRuns(legacyCounted);
+	return total;
 }
 
 export function writeTenantState(

@@ -231,14 +231,14 @@ export async function runRepos(opts: BatchOpts): Promise<VerifyResult[]> {
 		try {
 			let parsed = parsePythonResult(await verify());
 			if (workerLost(parsed)) {
-				onStage?.(`#${index + 1} evaluator task lost — retrying`);
+				onStage?.(`#${index + 1} evaluator task lost - retrying`);
 				await recycle();
 				parsed = parsePythonResult(await verify());
 			}
 			return normalizeResult(parsed, row, (nowMs() - t0) / 1000);
 		} catch (err) {
 			try {
-				onStage?.(`#${index + 1} evaluator error — retrying`);
+				onStage?.(`#${index + 1} evaluator error - retrying`);
 				await recycle();
 				const parsed = parsePythonResult(await verify());
 				return normalizeResult(parsed, row, (nowMs() - t0) / 1000);
@@ -298,6 +298,10 @@ export async function runRepos(opts: BatchOpts): Promise<VerifyResult[]> {
 
 		let explainToken: string | undefined;
 		try {
+			// A key added mid-session is picked up only on the next client.use of
+			// this explain pipe (llm_anthropic resolves ${ROCKETRIDE_ANTHROPIC_KEY}
+			// at boot). Inline verify boots after scoring, so a key present then is
+			// used. NarrateExistingResults boots a fresh client.use per item.
 			const explained = await client.use({
 				pipeline: explainPipeline,
 				name: `${label} · explain`,

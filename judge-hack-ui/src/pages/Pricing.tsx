@@ -1,19 +1,19 @@
 import React, { useEffect } from 'react';
-import { openCheckout } from '../billing';
+import { openCheckout, openManageBilling } from '../billing';
 import { BILLING_LIVE } from '../entitlement';
 import { Page } from '../components/bits';
 import { useNav } from '../NavContext';
 import { useRuns } from '../RunsContext';
 import type { PlanTier } from '../types';
 
-const TIERS: [string, string, string, string, string[], boolean][] = [
+const TIERS: [string, string, string, string, string[]][] = [
 	['Developer', '$20', '4 MB included · about 8 repos',
 		'For individual builders checking their own projects', [
-			'1 custom target',
+			'2 custom targets',
 			'Core scoring: verdict, backbone & evidence',
 			'Batch sheets up to 10 repos',
 			'Excel export',
-		], false],
+		]],
 	['Company', '$100', '20 MB included · about 40 repos',
 		'For sponsors verifying usage of their own product', [
 			'Everything in Developer',
@@ -21,7 +21,7 @@ const TIERS: [string, string, string, string, string[], boolean][] = [
 			'Git freshness & commit-history integrity checks',
 			'Custom scoring weights & tag cut-offs per target',
 			'Batch sheets up to 250 repos',
-		], true],
+		]],
 	['Organizers', '$200', '40 MB included · about 80 repos',
 		'For event teams judging across many sponsors', [
 			'Everything in Company',
@@ -29,14 +29,14 @@ const TIERS: [string, string, string, string, string[], boolean][] = [
 			'Live streaming verification',
 			'API access',
 			'Unlimited batches, priority processing',
-		], false],
+		]],
 ];
 
 const METER_POINTS: [string, string][] = [
 	['One simple rate', '$5 per MB of code verified, on every plan. An average repo is 500 KB, so about $2.50 per repo.'],
 	['Prepaid & metered live', 'Pay first, then use. Every verification draws your balance down by the code it actually scans.'],
 	['Hard stop at zero', 'The next run is refused the instant the balance is empty. Usage can never exceed what you paid.'],
-	['Metered top-ups', 'Going past your allowance uses metered billing at a premium per-KB rate — plans are far cheaper per MB, so upgrading beats topping up.'],
+	['Need more?', 'When your allowance runs out, the next run is refused. You can never spend more than you have paid. Upgrading to the next plan is the cheapest way to add capacity.'],
 ];
 
 export default function Pricing() {
@@ -44,6 +44,10 @@ export default function Pricing() {
 	const { settings } = useRuns();
 	const pin = (highlight || '').toLowerCase();
 	const current = settings.plan;
+	// Manage billing only exists when a subscription does. Unsubscribed users
+	// resolve to the developer tier for entitlements, but their Developer card
+	// must still offer Subscribe, not a manage dialog with nothing to manage.
+	const hasSubscription = ['subscribed', 'trialing', 'past_due'].includes(settings.billingStatus || '');
 
 	useEffect(() => {
 		if (!pin) return;
@@ -56,7 +60,7 @@ export default function Pricing() {
 				{BILLING_LIVE ? (
 					<>
 						Every plan includes a prepaid verification allowance that meters down in real
-						time and stops at zero — you can never spend more than you&apos;ve paid.
+						time and stops at zero - you can never spend more than you&apos;ve paid.
 						Checkout is the RocketRide billing modal (Stripe). Current entitlement:{' '}
 						<b>{current[0].toUpperCase() + current.slice(1)}</b>
 						{settings.billingStatus ? ` (${settings.billingStatus})` : ''}.
@@ -64,34 +68,36 @@ export default function Pricing() {
 				) : (
 					<>
 						These are the planned tiers. Checkout and plan caps are paused while we test
-						— Josh: staging billing is not wired yet. Testers get every feature. Flip
+						- Josh: staging billing is not wired yet. Testers get every feature. Flip
 						<code> BILLING_LIVE </code> when Store prices and the webhook exist.
 					</>
 				)}
 			</p>
 			<div className="plans">
-				{TIERS.map(([name, price, included, who, feats, mid]) => (
+				{TIERS.map(([name, price, included, who, feats]) => (
 					<div key={name} id={`plan-${name.toLowerCase()}`}
-						className={`glass plan${mid ? ' hot' : ''}${pin === name.toLowerCase() ? ' active' : ''}`}
+						className={`glass plan${name.toLowerCase() === current ? ' hot' : ''}${pin === name.toLowerCase() ? ' active' : ''}`}
 						style={{ padding: 22 }}>
 						{pin === name.toLowerCase() && (
 							<div className="planbadge">Unlocks the feature you clicked</div>
 						)}
 						<h3 style={{ margin: 0 }}>{name}</h3>
 						<div style={{ fontSize: 24, fontWeight: 800, margin: '6px 0 2px' }}>
-							{price}<span className="muted" style={{ fontSize: 13, fontWeight: 600 }}> prepaid</span>
+							{price}<span className="muted" style={{ fontSize: 13, fontWeight: 600 }}> per month</span>
 						</div>
 						<div style={{ fontSize: 13, fontWeight: 700, margin: '0 0 4px' }}>{included}</div>
 						<p className="muted" style={{ fontSize: 12.5, margin: '0 0 12px' }}>{who}</p>
 						<ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, lineHeight: 1.9 }}>
 							{feats.map((f) => <li key={f}>{f}</li>)}
 						</ul>
-						<button className={`btn sm ${mid ? 'gold' : 'ghost'}`} type="button"
+						<button className={`btn sm ${name.toLowerCase() === current ? 'gold' : 'ghost'}`} type="button"
 							style={{ marginTop: 16 }}
 							disabled={!BILLING_LIVE}
-							onClick={() => openCheckout(name.toLowerCase() as PlanTier)}>
+							onClick={() => (hasSubscription && current === name.toLowerCase()
+								? openManageBilling()
+								: openCheckout(name.toLowerCase() as PlanTier))}>
 							{BILLING_LIVE
-								? (current === name.toLowerCase() ? 'Manage billing →' : `Subscribe ${name} →`)
+								? (hasSubscription && current === name.toLowerCase() ? 'Manage billing →' : `Subscribe ${name} →`)
 								: 'Checkout paused'}
 						</button>
 					</div>
@@ -109,11 +115,11 @@ export default function Pricing() {
 				</div>
 				<p className="muted" style={{ fontSize: 12, margin: '14px 0 0' }}>
 					Each run is refused once the included allowance is empty, and a sheet that would
-					overshoot is truncated to what still fits. Stripe auto-recharge is not wired yet —
-					plans go live when a version is approved on the Store tab. Do not invent price IDs.
-					Compute is included: verification runs on the RocketRide engine over the GitHub API
-					with your own token; Developer verifies 2 repositories at once, Company/Organizers 3,
-					shared across the workspace up to 5.
+					overshoot is truncated to what still fits. The allowance is shared across your
+					organization: every member&apos;s verified MB draws down the same balance. Compute is
+					included: verification runs on the RocketRide engine over the GitHub API with your
+					own token; Developer verifies 2 repositories at once, Company/Organizers 3, shared
+					across the workspace up to 5.
 				</p>
 			</div>
 		</Page>

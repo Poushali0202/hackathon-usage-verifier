@@ -88,7 +88,7 @@ export function summarize(results: Array<{ tag?: string; backbone?: string; clas
 	for (const r of results) {
 		const failed = !!r.classify_failed || r.repo_accessible === false;
 		const t = failed ? 'FAILED' : (r.tag || 'None');
-		const b = r.backbone || (failed ? '—' : '?');
+		const b = r.backbone || (failed ? '-' : '?');
 		tags[t] = (tags[t] || 0) + 1;
 		backbone[b] = (backbone[b] || 0) + 1;
 	}
@@ -130,4 +130,9 @@ export function estimateAllowance(repoCount: number, plan: string, usedKb = 0) {
 		next_tier,
 		blocked: false,
 	};
+}
+
+/** Older stored verdict notes used an ASCII "->"; render them with the same arrow as scoringSummary. */
+export function judgeArrow(text: string): string {
+	return text.replace(/ -> /g, ' → ');
 }

@@ -1,21 +1,21 @@
 /**
  * The judge's own GitHub personal access token lives in their RocketRide
  * environment (user scope) under ROCKETRIDE_GITHUB_TOKEN. Every GitHub read
- * in a run — verification, prefill, target test — is made with it, so rate
+ * in a run - verification, prefill, target test - is made with it, so rate
  * limits and repository access are the judge's, not a shared org secret's.
  *
  * Nothing is cached in the browser: the value is read from the account API
  * at the moment a run starts and passed straight into the evaluator call.
- * Writes are read-modify-write of the user scope only — the same operation
- * the shell's Account → Environment page performs — and never touch org/team.
+ * Writes are read-modify-write of the user scope only - the same operation
+ * the shell's Environment Variables overlay performs - and never touch org/team.
  *
  * A failed getEnv is not "no token". That used to hide a broken read as if
  * the judge had never saved a PAT. Callers must treat GithubEnvReadError as
  * fail-closed, distinct from a successful empty read.
  */
 export const GITHUB_TOKEN_KEY = 'ROCKETRIDE_GITHUB_TOKEN';
-export const GITHUB_TOKEN_MISSING_REASON = 'GitHub token missing — add your personal access token in Settings → GitHub access';
-export const GITHUB_ENV_READ_REASON = 'Could not read your RocketRide environment — no verdict without confirming your GitHub token';
+export const GITHUB_TOKEN_MISSING_REASON = 'GitHub token missing - add your personal access token in Settings → GitHub access';
+export const GITHUB_ENV_READ_REASON = 'Could not read your RocketRide environment - no verdict without confirming your GitHub token';
 export const GITHUB_TOKEN_AUDIT_PREF = 'hj.githubTokenAudit';
 
 export type EnvClient = {
