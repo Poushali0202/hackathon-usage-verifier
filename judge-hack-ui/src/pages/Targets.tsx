@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { usePrefs, useShellConnection } from 'shell';
+import { useShellConnection } from 'shell';
 import { isCompanyPlan } from '../billing';
 import { GithubTokenNotice, Page, TagPill, TierLockModal, OrgBusyModal } from '../components/bits';
 import { canCreateCustomTarget, CUSTOM_TARGET_CAP_MESSAGE, customTargetCapUi, duplicateTargetName } from '../entitlement';
@@ -117,7 +117,6 @@ export default function Targets() {
 	const { targets, saveTarget, deleteTarget, settings, makeOrgLease } = useRuns();
 	const { go } = useNav();
 	const { client, isConnected } = useShellConnection();
-	const { setPref } = usePrefs();
 	const canTuneScore = isCompanyPlan(settings.plan);
 	const capUi = customTargetCapUi(settings.plan, targets);
 	const laserdataExisting = targets.find((t) => t.id === 'laserdata' || t.name.trim().toLowerCase() === 'laserdata');
@@ -274,7 +273,6 @@ export default function Targets() {
 		if (existing) {
 			setDraft(null);
 			setSelId(existing.id);
-			setPref('hj.targetId', existing.id);
 			setMsg('LaserData target selected. Test it on the sample repo below - or pick it on Quick verify / New run.');
 			return;
 		}
@@ -292,7 +290,6 @@ export default function Targets() {
 			setMsg(CUSTOM_TARGET_CAP_MESSAGE);
 			return;
 		}
-		setPref('hj.targetId', created.id);
 		setDraft(null);
 		setSelId(created.id);
 		setMsg('LaserData example saved. Test it below, or pick it as the target on Quick verify / New run.');
@@ -333,10 +330,11 @@ export default function Targets() {
 			setMsg(CUSTOM_TARGET_CAP_MESSAGE);
 			return;
 		}
-		setPref('hj.targetId', current.id);
+		// Saving a target must not change which target the next run uses (QA N2): the shared
+		// hj.targetId pref is written only when a run actually starts (RunsContext).
 		setDraft(null);
 		setSelId(current.id);
-		setMsg('Saved - this target is live for new runs');
+		setMsg('Saved. Pick it as the target on Quick verify or New run.');
 		setTimeout(() => setMsg((m) => (m.startsWith('Saved') ? '' : m)), 3500);
 	}
 

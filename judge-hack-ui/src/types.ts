@@ -91,6 +91,9 @@ export type VerifyResult = {
 	history_tampered?: { sha?: string; author?: string; committer?: string }[];
 	reused_pipelines?: Array<string | { name?: string; first_commit?: string }>;
 	earliest_commit?: string;
+	/** false when the history is longer than the scanned page and the true first commit could not be
+	 * pinned down; earliest_commit is then an upper bound ("at least this old"). */
+	earliest_commit_exact?: boolean;
 	history_penalty?: number;
 	status?: string;
 	reason?: string;

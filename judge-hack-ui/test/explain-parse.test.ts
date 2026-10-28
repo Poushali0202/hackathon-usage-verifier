@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
 	extractProse,
@@ -120,5 +123,38 @@ describe('mergeProse guardrails', () => {
 		expect(next.notes).not.toMatch(/classifier unreachable/);
 		expect(next.explain_error).toMatch(/description \/ usage JSON/);
 		expect(next.tag).toBe('Less');
+	});
+});
+
+describe('mergeProse attribution (QA H2)', () => {
+	type Result = Parameters<typeof mergeProse>[0];
+	type Prose = Parameters<typeof mergeProse>[1];
+	const base = {
+		github: 'https://github.com/acme/hopper',
+		tag: 'Less',
+		backbone: 'No',
+		score: 1,
+		status: 'complete',
+		notes: 'Deterministic score 1.0 → Less / backbone No',
+		pipelines: [],
+	} as unknown as Result;
+	const prose = {
+		description: 'Hopper routes trucks.',
+		rocketride_usage: 'One pipeline, never called.',
+		justification: 'Less because it is never invoked.',
+		team_members: 'Alice, Bob',
+	} as unknown as Prose;
+
+	it('never takes team names from the model', () => {
+		expect(mergeProse(base, prose).names).toBeUndefined();
+	});
+
+	it('keeps the names the judge sheet supplied', () => {
+		expect(mergeProse({ ...base, names: 'Team Rocket' }, prose).names).toBe('Team Rocket');
+	});
+
+	it('the explain prompts no longer ask for team members', () => {
+		const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'verify', 'explain.ts'), 'utf8');
+		expect(src).not.toContain('team_members');
 	});
 });

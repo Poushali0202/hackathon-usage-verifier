@@ -128,6 +128,60 @@ def history_tamper_scan(commits: list, win: dict) -> tuple:
     return tampered[:5], earliest
 
 
+def _commit_dates(item: dict) -> list:
+    c = (item or {}).get("commit", {}) or {}
+    return [d for d in ((c.get("author") or {}).get("date", ""),
+                        (c.get("committer") or {}).get("date", "")) if d]
+
+
+def first_commit_date(gh, owner: str, repo: str, newest: list, path: str = "") -> tuple:
+    """The TRUE earliest commit date (oldest of author/committer) of a repo, or of one path.
+    `newest` is the newest-first page already fetched with per_page=100. A short page IS the whole
+    history, so its oldest date is exact and costs nothing more. A full page means the history is
+    longer than one page (zod: ~3250 commits, p-map: 106), and reading only that page reported the
+    100th-newest commit as "first" (QA D7). The fetcher exposes no response headers, so the Link
+    rel=last trick is unavailable; instead GitHub's `until=` filter answers "any commit on or before
+    day D?" correctly whatever the size, so binary-search the day (about 14 calls for 1990..today)
+    and take the oldest commit of that day. Returns (date, exact)."""
+    dates = [d for it in (newest or []) for d in _commit_dates(it)]
+    page_oldest = min(dates) if dates else ""
+    if len(newest or []) < 100:
+        return page_oldest, True
+    from datetime import date, timedelta
+
+    def url(per_page: int, extra: str) -> str:
+        u = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page={per_page}{extra}"
+        return u + (f"&path={quote(path)}" if path else "")
+
+    def on_or_before(day):
+        st, body = gh(url(1, f"&until={day.isoformat()}T23:59:59Z"))
+        if st != 200:
+            raise RuntimeError(f"HTTP {st}")
+        lst = json.loads(body)
+        return lst[0] if isinstance(lst, list) and lst else None
+
+    try:
+        hi = date.fromisoformat(page_oldest[:10])
+        lo = date(1990, 1, 1)
+        ancient = on_or_before(lo)
+        if ancient is not None:          # history claims to start before 1990: report what git says
+            return min(_commit_dates(ancient) + [page_oldest]), True
+        while lo < hi:
+            mid = lo + timedelta(days=(hi - lo).days // 2)
+            if on_or_before(mid) is not None:
+                hi = mid
+            else:
+                lo = mid + timedelta(days=1)
+        day = hi.isoformat()
+        st, body = gh(url(100, f"&since={day}T00:00:00Z&until={day}T23:59:59Z"))
+        if st != 200:
+            raise RuntimeError(f"HTTP {st}")
+        day_dates = [d for it in json.loads(body) for d in _commit_dates(it)]
+        return min(day_dates + [page_oldest]), True
+    except Exception:
+        return page_oldest, False
+
+
 def event_window(event_date: str | None) -> dict | None:
     """The allowed commit window for an event date (YYYY-MM-DD): event ± EVENT_GRACE_DAYS.
     Pipelines whose history starts BEFORE the window are pre-existing work (reuse)."""
@@ -440,8 +494,9 @@ def evaluate(evidence: dict, target: Target | None = None) -> dict:
         pp_date = str(project_predates.get("date", ""))[:10]
         early = str(evidence.get("earliest_commit", ""))[:10]
         earliest = min(d for d in (pp_date, early) if d) if (pp_date or early) else "?"
+        at_least = "" if evidence.get("earliest_commit_exact", True) else "at least "
         add(f"⚠ FLAGGED: project history predates the event window {win['start']}..{win['end']} - "
-            f"work goes back to {earliest} (latest pre-window commit "
+            f"work goes back to {at_least}{earliest} (latest pre-window commit "
             f"{project_predates.get('sha', '?')} on {pp_date or '?'}); judge-set penalty",
             -pen)
     if win and tampered:
@@ -467,6 +522,7 @@ def evaluate(evidence: dict, target: Target | None = None) -> dict:
             "project_predates": project_predates if win else None,
             "history_tampered": tampered if win else [],
             "earliest_commit": evidence.get("earliest_commit", ""),
+            "earliest_commit_exact": bool(evidence.get("earliest_commit_exact", True)),
             "repo_created_at": evidence.get("repo_created_at", ""),
             "reused_pipelines": [{"name": e["name"], "first_commit": e.get("first_commit")}
                                  for e in reused]}
@@ -580,8 +636,9 @@ def evidence_lines(ev: dict) -> list:
         pp_date = str(pp.get("date", ""))[:10]
         early = str(ev.get("earliest_commit", ""))[:10]
         earliest = min(d for d in (pp_date, early) if d) if (pp_date or early) else "?"
+        at_least = "" if ev.get("earliest_commit_exact", True) else "at least "
         lines.append(f"⚠ FLAGGED - project history predates the event window "
-                     f"{win['start']}..{win['end']}: work goes back to {earliest}; latest pre-window "
+                     f"{win['start']}..{win['end']}: work goes back to {at_least}{earliest}; latest pre-window "
                      f"commit {pp.get('sha', '?')} on {pp_date or '?'} ({pen_txt}; judge's call)")
     if win and ev.get("history_tampered"):
         for t in ev["history_tampered"][:3]:
@@ -629,8 +686,9 @@ def det_note(ev: dict) -> str:
         pp_date = str(ev["project_predates"].get("date", ""))[:10]
         early = str(ev.get("earliest_commit", ""))[:10]
         earliest = min(d for d in (pp_date, early) if d) if (pp_date or early) else "?"
+        at_least = "" if ev.get("earliest_commit_exact", True) else "at least "
         note += (f" ⚠ FLAGGED: project history predates the event window (work goes back to "
-                 f"{earliest}; {pen_txt}, judge's call).")
+                 f"{at_least}{earliest}; {pen_txt}, judge's call).")
     if ev.get("history_tampered"):
         t0 = ev["history_tampered"][0]
         note += (f" ⚠ FLAGGED: commit-date rewrite detected ({t0['sha']}: authored "
@@ -768,7 +826,7 @@ def gather(url: str, gh, event_date: str | None = None,
     # earliest commit touching the pipe file, taking the older of author/committer date so a
     # rebase can't hide pre-existing work.
     win = event_window(event_date)
-    project_predates, tampered, earliest = None, [], ""
+    project_predates, tampered, earliest, earliest_exact = None, [], "", True
     if win:
         for pe in pipes:
             st, cbody = gh(f"https://api.github.com/repos/{owner}/{repo}/commits"
@@ -778,10 +836,7 @@ def gather(url: str, gh, event_date: str | None = None,
                 try:
                     commits = json.loads(cbody)
                     if isinstance(commits, list) and commits:
-                        c = commits[-1].get("commit", {})          # newest-first → last = earliest
-                        dates = [c.get("author", {}).get("date", ""),
-                                 c.get("committer", {}).get("date", "")]
-                        first = min(d for d in dates if d) if any(dates) else None
+                        first = first_commit_date(gh, owner, repo, commits, pe["path"])[0] or None
                 except Exception:
                     first = None
             pe["first_commit"] = first
@@ -805,9 +860,11 @@ def gather(url: str, gh, event_date: str | None = None,
         st, cbody = gh(f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=100")
         if st == 200:
             try:
-                tampered, earliest = history_tamper_scan(json.loads(cbody), win)
+                commits = json.loads(cbody)
+                tampered, _seen = history_tamper_scan(commits, win)
+                earliest, earliest_exact = first_commit_date(gh, owner, repo, commits)
             except Exception:
-                tampered, earliest = [], ""
+                tampered, earliest, earliest_exact = [], "", False
 
     # README - the repo's own title/head, used to label projects better than the repo slug
     readme_title, readme_head = "", ""
@@ -835,7 +892,7 @@ def gather(url: str, gh, event_date: str | None = None,
         "event_window": win, "repo_created_at": created_at,
         "history_penalty": history_penalty,
         "project_predates": project_predates, "history_tampered": tampered,
-        "earliest_commit": earliest,
+        "earliest_commit": earliest, "earliest_commit_exact": earliest_exact,
         "readme_title": readme_title, "readme_head": readme_head,
     }
 
@@ -996,7 +1053,7 @@ def _gather_generic(url: str, gh, event_date: str | None,
 
     # project-level commit-history integrity (identical logic to the preset path)
     win = event_window(event_date)
-    project_predates, tampered, earliest = None, [], ""
+    project_predates, tampered, earliest, earliest_exact = None, [], "", True
     if win:
         st, cbody = gh(f"https://api.github.com/repos/{owner}/{repo}/commits"
                        f"?until={win['start']}T00:00:00Z&per_page=1")
@@ -1015,9 +1072,11 @@ def _gather_generic(url: str, gh, event_date: str | None,
         st, cbody = gh(f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=100")
         if st == 200:
             try:
-                tampered, earliest = history_tamper_scan(json.loads(cbody), win)
+                commits = json.loads(cbody)
+                tampered, _seen = history_tamper_scan(commits, win)
+                earliest, earliest_exact = first_commit_date(gh, owner, repo, commits)
             except Exception:
-                tampered, earliest = [], ""
+                tampered, earliest, earliest_exact = [], "", False
 
     if fetch_fails[0]:
         return {"accessible": True, "fetch_incomplete": True,
@@ -1034,7 +1093,7 @@ def _gather_generic(url: str, gh, event_date: str | None,
         "event_window": win, "repo_created_at": created_at,
         "history_penalty": history_penalty,
         "project_predates": project_predates, "history_tampered": tampered,
-        "earliest_commit": earliest,
+        "earliest_commit": earliest, "earliest_commit_exact": earliest_exact,
         "readme_title": readme_title, "readme_head": readme_head,
         "target_name": t.name,
     }
@@ -1086,8 +1145,9 @@ def _evaluate_generic(evidence: dict, t: Target) -> dict:
         pp_date = str(project_predates.get("date", ""))[:10]
         early = str(evidence.get("earliest_commit", ""))[:10]
         earliest = min(d for d in (pp_date, early) if d) if (pp_date or early) else "?"
+        at_least = "" if evidence.get("earliest_commit_exact", True) else "at least "
         add(f"⚠ FLAGGED: project history predates the event window {win['start']}..{win['end']} - "
-            f"work goes back to {earliest} (latest pre-window commit "
+            f"work goes back to {at_least}{earliest} (latest pre-window commit "
             f"{project_predates.get('sha', '?')} on {pp_date or '?'}); judge-set penalty", -pen)
     if win and tampered:
         t0 = tampered[0]
@@ -1133,5 +1193,6 @@ def _evaluate_generic(evidence: dict, t: Target) -> dict:
             "project_predates": project_predates if win else None,
             "history_tampered": tampered if win else [],
             "earliest_commit": evidence.get("earliest_commit", ""),
+            "earliest_commit_exact": bool(evidence.get("earliest_commit_exact", True)),
             "repo_created_at": evidence.get("repo_created_at", ""),
             "reused_pipelines": []}

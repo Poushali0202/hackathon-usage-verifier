@@ -33,8 +33,7 @@ Return ONLY a strict JSON object - start with { and end with }, no prose outside
                      'the 7-node agent pipeline is loaded and run at relay.ts:83'). If a pipeline is
                      present but never called, say so explicitly. If a pipeline predates the event
                      window (reused), call that out.>",
-  "project_name": "<ONLY if the README clearly states the project's name - else omit>",
-  "team_members": "<ONLY if the README clearly lists team member names - comma-separated - else omit>"
+  "project_name": "<ONLY if the README clearly states the project's name - else omit>"
 }
 Rules: cite ONLY what is in the evidence. Never contradict the verdict. If the tag is None, state that
 the code shows no real RocketRide usage. Write plainly and never use em dashes anywhere in your
@@ -52,8 +51,7 @@ Return ONLY a strict JSON object - start with { and end with }, no prose outside
   "description": "<1-2 sentences: what the project does>",
   "rocketride_usage": "<1-2 sentences: concretely how it uses TARGET - cite the breakdown signals>",
   "justification": "<2-3 sentences: why the code earns THIS tag and backbone, citing those signals>",
-  "project_name": "<ONLY if the README clearly states the project's name - else omit>",
-  "team_members": "<ONLY if the README clearly lists team member names - comma-separated - else omit>"
+  "project_name": "<ONLY if the README clearly states the project's name - else omit>"
 }
 Rules: cite ONLY what is in the evidence. Never mention pipelines, RAG, or retrieval unless those
 words appear in the evidence table. Never contradict the verdict. If the tag is None, state that
@@ -91,7 +89,7 @@ export function explainPrompt(
 		...(result.platform ? { platform_evidence: result.platform } : {}),
 	};
 	const readmeBlock = readmeHead
-		? `\n\nREADME EXCERPT (for project_name / team_members / description only):\n${readmeHead.slice(0, 2500)}`
+		? `\n\nREADME EXCERPT (for project_name / description only):\n${readmeHead.slice(0, 2500)}`
 		: '';
 	const base = usesPipelineRubric(result)
 		? (targetName === 'RocketRide' ? EXPLAIN_PROMPT : EXPLAIN_PROMPT.replace(/RocketRide/g, targetName))
@@ -198,7 +196,9 @@ export function mergeProse(result: VerifyResult, prose: ExplainProse): VerifyRes
 		rocketride_usage: cleaned.rocketride_usage || fb.rocketride_usage,
 		justification: cleaned.justification || result.justification || fb.justification,
 		project: projectFromReadme && projectLooksLikeSlug ? projectFromReadme : result.project,
-		names: result.names || cleaned.team_members || result.names,
+		// Attribution is never model prose (QA H2: three runs, three different teams). The names
+		// shown are the ones the judge's sheet supplied, or nothing.
+		names: result.names,
 	};
 }
 

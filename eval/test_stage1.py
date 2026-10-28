@@ -397,5 +397,161 @@ class TestDetNoteArrow(unittest.TestCase):
             self.assertNotIn("->", note)
 
 
+class TestFirstCommitDate(unittest.TestCase):
+    """QA D7: the 'work goes back to' date must be the TRUE first commit even when the history is
+    longer than one API page (zod, ~3250 commits, was reported as 2026-08-29 instead of 2020-03-07;
+    p-map at 106 commits is the smallest reproduction). The fetcher exposes no headers, so the
+    engine binary-searches GitHub's `until=` filter by day instead of following Link rel=last."""
+
+    @staticmethod
+    def _repo(n_commits: int, start: str, path_shas=None, fail_until=False):
+        """A fake GitHub commits endpoint: one commit per day from `start`, newest first, honouring
+        per_page / until / since / path the way the real API does."""
+        import json
+        from datetime import date, timedelta
+        from urllib.parse import parse_qs, urlparse
+
+        d0 = date.fromisoformat(start)
+        commits = []
+        for i in range(n_commits):
+            d = (d0 + timedelta(days=i)).isoformat() + "T12:00:00Z"
+            commits.append({"sha": f"{i:07x}", "commit": {"author": {"date": d}, "committer": {"date": d}}})
+        calls = [0]
+
+        def gh(url: str):
+            calls[0] += 1
+            q = parse_qs(urlparse(url).query)
+            if fail_until and "until" in q:
+                return 500, ""
+            lst = commits
+            if "path" in q and path_shas is not None:
+                lst = [c for c in commits if int(c["sha"], 16) in path_shas]
+            until = q.get("until", [None])[0]
+            since = q.get("since", [None])[0]
+            if until:
+                lst = [c for c in lst if c["commit"]["committer"]["date"] <= until]
+            if since:
+                lst = [c for c in lst if c["commit"]["committer"]["date"] >= since]
+            per = int(q.get("per_page", ["30"])[0])
+            return 200, json.dumps(list(reversed(lst))[:per])
+
+        return gh, calls
+
+    def _page(self, gh, path=""):
+        import json
+        extra = f"&path={path}" if path else ""
+        st, body = gh(f"https://api.github.com/repos/a/b/commits?per_page=100{extra}")
+        self.assertEqual(st, 200)
+        return json.loads(body)
+
+    def test_short_history_is_exact_without_extra_calls(self):
+        import engine as engine_mod
+        gh, calls = self._repo(38, "2026-08-03")
+        page = self._page(gh)
+        calls[0] = 0
+        self.assertEqual(engine_mod.first_commit_date(gh, "a", "b", page), ("2026-08-03T12:00:00Z", True))
+        self.assertEqual(calls[0], 0)
+
+    def test_long_history_finds_the_true_first_commit(self):
+        import engine as engine_mod
+        gh, calls = self._repo(3250, "2017-06-10")           # zod-sized
+        page = self._page(gh)
+        self.assertEqual(len(page), 100)
+        self.assertEqual(page[-1]["commit"]["committer"]["date"][:10], "2026-01-24")  # the old, wrong answer
+        calls[0] = 0
+        self.assertEqual(engine_mod.first_commit_date(gh, "a", "b", page), ("2017-06-10T12:00:00Z", True))
+        self.assertLessEqual(calls[0], 20)
+
+    def test_just_over_one_page(self):
+        import engine as engine_mod
+        gh, _calls = self._repo(106, "2016-10-21")           # p-map-sized
+        page = self._page(gh)
+        self.assertEqual(engine_mod.first_commit_date(gh, "a", "b", page), ("2016-10-21T12:00:00Z", True))
+
+    def test_per_path_history(self):
+        import engine as engine_mod
+        gh, _calls = self._repo(3250, "2017-06-10", path_shas={5, 200, 3000})
+        page = self._page(gh, "agent.pipe")
+        self.assertEqual(engine_mod.first_commit_date(gh, "a", "b", page, "agent.pipe"),
+                         ("2017-06-15T12:00:00Z", True))
+
+    def test_api_failure_falls_back_to_the_page_and_says_so(self):
+        import engine as engine_mod
+        gh, _calls = self._repo(3250, "2017-06-10", fail_until=True)
+        page = self._page(gh)
+        got = engine_mod.first_commit_date(gh, "a", "b", page)
+        self.assertEqual(got, ("2026-01-24T12:00:00Z", False))
+
+    def test_det_note_says_at_least_when_not_exact(self):
+        import engine as engine_mod
+        base = {"score": 2.5, "tag": "Moderate", "backbone": "Yes", "pipelines": [], "sdk": {},
+                "pipelines_called": 1, "pipelines_total": 1,
+                "event_window": {"start": "2026-09-08", "end": "2026-09-12", "event": "2026-09-10"},
+                "project_predates": {"date": "2026-08-03T00:00:00Z", "sha": "abc1234"},
+                "earliest_commit": "2026-01-24T12:00:00Z", "history_penalty": 2}
+        self.assertIn("work goes back to at least 2026-01-24",
+                      engine_mod.det_note({**base, "earliest_commit_exact": False}))
+        self.assertIn("work goes back to 2026-01-24",
+                      engine_mod.det_note({**base, "earliest_commit_exact": True}))
+
+
+class TestPrefillNameAndPlatform(unittest.TestCase):
+    """QA T3 (prefill named Cognee after a docs heading) and T5 (Cognee typed as a platform because
+    its docs mention a cloud console hostname)."""
+
+    @staticmethod
+    def _ctx(corpus, pick, repo):
+        cand, sources = _candidates(corpus, pick)
+        return {
+            "repo": repo,
+            "github_description": "",
+            "warnings": [],
+            "corpus": corpus,
+            "corpus_lower": "\n".join(corpus.values()).lower(),
+            "candidates": cand,
+            "sources": sources,
+        }
+
+    def test_docs_heading_sentence_collapses_to_the_product_name(self):
+        self.assertEqual(_name_from_title("Build AI Memory with Cognee - Cognee Documentation"), "Cognee")
+        self.assertEqual(_name_from_title("Cognee Documentation"), "Cognee")
+        corpus = {
+            "pyproject.toml": 'name = "cognee"\n',
+            "README.md": "# Build AI Memory with Cognee\n\n```python\nimport cognee\nawait cognee.add('x')\n```\n",
+            "docs:https://docs.cognee.ai": "<html><head><title>Build AI Memory with Cognee - Cognee Documentation"
+                                           "</title></head><body><h1>Build AI Memory with Cognee</h1></body></html>",
+        }
+        pick = {"pkg": ["pyproject.toml"], "env": [], "cli": [],
+                "docs": ["README.md", "docs:https://docs.cognee.ai"], "consts": []}
+        cfg = finalize(self._ctx(corpus, pick, "topoteretes/cognee"), "")["config"]
+        self.assertEqual(cfg["name"], "Cognee")
+
+    def test_cloud_console_hostname_alone_is_not_a_platform(self):
+        corpus = {
+            "pyproject.toml": 'name = "cognee"\n',
+            "README.md": ("# Cognee\n\n```python\nimport cognee\nawait cognee.add('x')\n```\n"
+                          "Sign in at https://cloud.cognee.ai then set\n"
+                          "COGNEE_CLOUD_API_URL=https://api.cognee.ai\nCOGNEE_CLOUD_AUTH_TOKEN=x\n"),
+        }
+        pick = {"pkg": ["pyproject.toml"], "env": [], "cli": [], "docs": ["README.md"], "consts": []}
+        cfg = finalize(self._ctx(corpus, pick, "topoteretes/cognee"), "")["config"]
+        self.assertIn("cloud.cognee.ai", cfg.get("platform_domains") or "")
+        self.assertIn("code", cfg["types"])
+        self.assertNotIn("platform", cfg["types"])
+        self.assertNotEqual(cfg["architecture_template"], "data_platform")
+
+    def test_platform_needs_a_footprint_in_consumer_repos(self):
+        corpus = {
+            "pyproject.toml": 'name = "butterbase"\n',
+            "README.md": ("# Butterbase\n\n```python\nimport butterbase\nclient = butterbase.create_client()\n```\n"
+                          "Console: https://cloud.butterbase.ai\n"),
+            "src/keys.py": 'if not key.startswith("bb_"):\n    raise ValueError("bad key")\n',
+        }
+        pick = {"pkg": ["pyproject.toml"], "env": [], "cli": [], "docs": ["README.md"], "consts": ["src/keys.py"]}
+        cfg = finalize(self._ctx(corpus, pick, "butterbase-ai/butterbase"), "")["config"]
+        self.assertIn("bb_", cfg.get("platform_markers") or "")
+        self.assertIn("platform", cfg["types"])
+
+
 if __name__ == "__main__":
     unittest.main()

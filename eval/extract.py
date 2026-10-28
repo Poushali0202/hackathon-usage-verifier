@@ -120,7 +120,7 @@ def _name_from_title(title: str) -> str:
         return ""
     parts = [p.strip() for p in re.split(r"\s+[-|–—]\s+", title) if p.strip()]
     for part in reversed(parts or [title]):
-        cleaned = re.sub(r"\bdocs?\b", "", part, flags=re.I)
+        cleaned = re.sub(r"\b(docs?|documentation)\b", "", part, flags=re.I)
         cleaned = re.sub(r"\s+CLI\s*$", "", cleaned, flags=re.I).strip(" -")
         if cleaned and cleaned.lower() not in _NAME_SKIP and 1 < len(cleaned) <= 40:
             if re.fullmatch(r"tier\s*\d+", cleaned, flags=re.I):
@@ -261,13 +261,28 @@ def _package_title(cand: dict, ctx: dict | None = None) -> str:
     return repo.title() if repo else ""
 
 
+def _collapse_to_product(name: str, stems: set) -> str:
+    """'Build AI Memory with Cognee' -> 'Cognee' when a dependency/repo stem names the product.
+    A docs heading is a sentence ABOUT the product, not its name (QA T3); keep the whole phrase
+    only when no single word of it is the product token."""
+    n = (name or "").strip()
+    words = n.split()
+    if not stems or len(words) < 2:
+        return n
+    for w in words:
+        key = re.sub(r"[^a-z0-9]", "", w.lower())
+        if len(key) >= 3 and key in stems:
+            return w.strip(" ,.:;()[]\"'")
+    return n
+
+
 def _display_name(cand: dict, ctx: dict | None = None) -> str:
     ctx = ctx or {}
     stems = _product_stems(cand, ctx)
     ranked: list[tuple[int, str]] = []
 
     def consider(name: str, rank: int) -> None:
-        n = (name or "").strip()
+        n = _collapse_to_product(name, stems)
         if _plausible_name(n, stems):
             ranked.append((rank, n))
 
@@ -847,7 +862,13 @@ def finalize(ctx: dict, answer_text: str) -> dict:
 
     if out.get("dependency_names") or out.get("invocation"):
         out["types"].append("code")
-    if out.get("platform_domains"):
+    # A hostname alone does not make a target a platform: most SDK vendors also sell a hosted
+    # console (cloud.vendor.ai), and scoring their consumers on deploy domains is wrong (Cognee,
+    # QA T5). "platform" needs a footprint in consumer repos too (config files/dirs or key
+    # prefixes), or no code-level signal at all.
+    if out.get("platform_domains") and (
+        out.get("platform_files") or out.get("platform_markers") or "code" not in out["types"]
+    ):
         out["types"].append("platform")
     api_probe = " ".join((out.get("hosted_markers", ""), out.get("invocation", ""),
                           out.get("platform_domains", ""))).lower()

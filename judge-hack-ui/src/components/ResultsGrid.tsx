@@ -52,11 +52,11 @@ function BuiltOn({ r, company }: { r: VerifyResult; company: boolean }) {
 		);
 	}
 	const bits: string[] = [];
-	if (r.earliest_commit) bits.push(String(r.earliest_commit).slice(0, 10));
+	if (r.earliest_commit) bits.push(`${r.earliest_commit_exact === false ? '≤ ' : ''}${String(r.earliest_commit).slice(0, 10)}`);
 	if (r.project_predates) bits.push('pre-event');
 	if (tampered(r)) bits.push('tampered');
 	if (reusedNames(r).length) bits.push(`${reusedNames(r).length} reused`);
-	if (!bits.length) return <span className="muted">in window</span>;
+	if (!bits.length) return <span className="muted">{r.event_window ? 'in window' : 'no event date'}</span>;
 	return <span className={isFlagged(r) ? 'flagcell' : undefined}>{bits.join(' · ')}</span>;
 }
 
@@ -131,7 +131,7 @@ function ProjectDossier({ r, company, runId, index, onBack }: {
 					{company && (r.project_predates || tampered(r)) && (
 						<div className="dqline">
 							<b>Flagged</b>{' '}
-							{!!r.project_predates && <>- work goes back to <b>{String(r.earliest_commit || '').slice(0, 10)}</b>, before the event window {win ? `(${win})` : ''}. </>}
+							{!!r.project_predates && <>- work goes back to {r.earliest_commit_exact === false ? 'at least ' : ''}<b>{String(r.earliest_commit || '').slice(0, 10)}</b>, before the event window {win ? `(${win})` : ''}. </>}
 							{tampered(r) && <>- commit-date rewriting detected: {(r.history_tampered || []).slice(0, 3).map((t) =>
 								`${String(t.sha).slice(0, 7)} authored ${String(t.author).slice(0, 10)} but re-stamped ${String(t.committer).slice(0, 10)}`).join('; ')}. </>}
 							Judge-set penalty applied: <b>−{r.history_penalty ?? 2}</b> pts.
