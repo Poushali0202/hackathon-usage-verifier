@@ -402,7 +402,10 @@ describe.skipIf(!LIVE)('eval round 1 live', () => {
 
 			const zod7 = zodOf(e7);
 			const zodProse = [zod7?.description, zod7?.rocketride_usage, zod7?.justification].join('\n');
-			const zodClaims = /(?<!no (?:real )?)rocketride (?:pipeline|sdk|client)|client\.use|\.pipe\b|pipeline is actively called/i.test(zodProse);
+			// Only sentences that are not negated can claim usage: "the RocketRide SDK is not used" is a
+			// correct None statement, and the model phrases it differently every run.
+			const affirmative = zodProse.split(/(?<=[.;!?])\s+|\n/).filter((sentence) => !/\b(no|not|never|none|without|nor)\b/i.test(sentence)).join('\n');
+			const zodClaims = /rocketride (?:pipeline|sdk|client)|client\.use|\.pipe\b|pipeline is actively called/i.test(affirmative);
 			if (!narrationOn && zod7?.explain_failed) {
 				note({
 					id: 'E11',
@@ -426,7 +429,7 @@ describe.skipIf(!LIVE)('eval round 1 live', () => {
 					id: 'E11',
 					did: 'Read zod prose from E7',
 					expected: 'A None repo must not claim RocketRide usage',
-					saw: `tag=${zod7?.tag} explain_failed=${zod7?.explain_failed} usage=${JSON.stringify(String(zod7?.rocketride_usage || '').slice(0, 320))}`,
+					saw: `tag=${zod7?.tag} explain_failed=${zod7?.explain_failed} usage=${JSON.stringify(String(zod7?.rocketride_usage || '').slice(0, 320))} justification=${JSON.stringify(String(zod7?.justification || '').slice(0, 320))}`,
 					verdict: zod7?.tag === 'None' && !zodClaims ? 'PASS' : 'FAIL',
 					advisory: true,
 				});
