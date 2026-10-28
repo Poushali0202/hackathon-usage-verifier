@@ -139,45 +139,27 @@ def first_commit_date(gh, owner: str, repo: str, newest: list, path: str = "") -
     `newest` is the newest-first page already fetched with per_page=100. A short page IS the whole
     history, so its oldest date is exact and costs nothing more. A full page means the history is
     longer than one page (zod: ~3250 commits, p-map: 106), and reading only that page reported the
-    100th-newest commit as "first" (QA D7). The fetcher exposes no response headers, so the Link
-    rel=last trick is unavailable; instead GitHub's `until=` filter answers "any commit on or before
-    day D?" correctly whatever the size, so binary-search the day (about 14 calls for 1990..today)
-    and take the oldest commit of that day. Returns (date, exact)."""
+    100th-newest commit as "first" (QA D7). The evaluator never sees response headers and the
+    replay driver re-runs the whole evaluator per fetch round, so the answer has to come from ONE
+    extra URL: `<list>&page=last`, a marker both fetch layers resolve by reading page 1's
+    `Link: rel="last"` and returning that page (its last entry is the oldest commit). Works for a
+    single path too. Returns (date, exact)."""
     dates = [d for it in (newest or []) for d in _commit_dates(it)]
     page_oldest = min(dates) if dates else ""
     if len(newest or []) < 100:
         return page_oldest, True
-    from datetime import date, timedelta
-
-    def url(per_page: int, extra: str) -> str:
-        u = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page={per_page}{extra}"
-        return u + (f"&path={quote(path)}" if path else "")
-
-    def on_or_before(day):
-        st, body = gh(url(1, f"&until={day.isoformat()}T23:59:59Z"))
-        if st != 200:
-            raise RuntimeError(f"HTTP {st}")
-        lst = json.loads(body)
-        return lst[0] if isinstance(lst, list) and lst else None
-
+    base = f"https://api.github.com/repos/{owner}/{repo}/commits?per_page=100"
+    if path:
+        base += f"&path={quote(path)}"
     try:
-        hi = date.fromisoformat(page_oldest[:10])
-        lo = date(1990, 1, 1)
-        ancient = on_or_before(lo)
-        if ancient is not None:          # history claims to start before 1990: report what git says
-            return min(_commit_dates(ancient) + [page_oldest]), True
-        while lo < hi:
-            mid = lo + timedelta(days=(hi - lo).days // 2)
-            if on_or_before(mid) is not None:
-                hi = mid
-            else:
-                lo = mid + timedelta(days=1)
-        day = hi.isoformat()
-        st, body = gh(url(100, f"&since={day}T00:00:00Z&until={day}T23:59:59Z"))
+        st, body = gh(base + "&page=last")
         if st != 200:
-            raise RuntimeError(f"HTTP {st}")
-        day_dates = [d for it in json.loads(body) for d in _commit_dates(it)]
-        return min(day_dates + [page_oldest]), True
+            return page_oldest, False
+        lst = json.loads(body)
+        found = [d for it in (lst if isinstance(lst, list) else []) for d in _commit_dates(it)]
+        if not found:
+            return page_oldest, False
+        return min(found + [page_oldest]), True
     except Exception:
         return page_oldest, False
 

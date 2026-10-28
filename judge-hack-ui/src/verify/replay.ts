@@ -34,15 +34,32 @@ const UA = 'hackjudge-python-v1';
 export type FetchCache = Record<string, [number, string]>;
 export type Fetcher = (url: string) => Promise<[number, string]>;
 
-type HttpShape = { status_code?: number; body?: unknown };
+type HttpShape = { status_code?: number; body?: unknown; headers?: Record<string, unknown> };
+
+/** The evaluator never sees response headers. It asks for `<list url>&page=last` and the fetch
+ * layer resolves the marker: fetch page 1, read `Link: rel="last"`, fetch that page. One extra
+ * request, exact; used for the true first commit of a repo (QA D7). */
+export const LAST_PAGE_MARKER = '&page=last';
+
+/** Page named by a GitHub Link header's rel="last" entry, or 0 when the list fits one page. */
+export function lastPageNumber(link: unknown): number {
+	for (const part of String(link || '').split(',')) {
+		if (!/rel="last"/.test(part)) continue;
+		const m = part.match(/[?&]page=(\d+)/);
+		if (m) return Number(m[1]);
+	}
+	return 0;
+}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function asStatusBody(value: unknown): [number, string] {
+function asStatusBody(value: unknown): [number, string, string] {
 	const out = (value && typeof value === 'object' ? value : {}) as HttpShape;
 	const status = Number(out.status_code);
 	const body = typeof out.body === 'string' ? out.body : (out.body == null ? '' : JSON.stringify(out.body));
-	return [Number.isFinite(status) ? status : 0, body];
+	const headers = out.headers && typeof out.headers === 'object' ? out.headers : {};
+	const linkKey = Object.keys(headers).find((k) => k.toLowerCase() === 'link');
+	return [Number.isFinite(status) ? status : 0, body, linkKey ? String(headers[linkKey] || '') : ''];
 }
 
 /**
@@ -58,8 +75,8 @@ export function githubBearerUrl(url: string): boolean {
 /** GET through `http_1`; GitHub repo hosts get the judge's token, everything else goes bare. */
 export function makeHttpFetcher(client: PythonToolClient, token: string, githubToken: string): Fetcher {
 	let toolName = HTTP_TOOL;
-	const call = async (url: string): Promise<[number, string]> => {
-		if (!/^https:\/\//i.test(url)) return [0, 'blocked: only https URLs'];
+	const call = async (url: string): Promise<[number, string, string]> => {
+		if (!/^https:\/\//i.test(url)) return [0, 'blocked: only https URLs', ''];
 		const github = githubBearerUrl(url);
 		const input: Record<string, unknown> = {
 			url,
@@ -81,18 +98,30 @@ export function makeHttpFetcher(client: PythonToolClient, token: string, githubT
 			throw first;
 		}
 	};
-	return async (url) => {
+	const withRetry = async (url: string): Promise<[number, string, string]> => {
 		for (let attempt = 0; ; attempt += 1) {
-			let res: [number, string];
+			let res: [number, string, string];
 			try {
 				res = await call(url);
 			} catch (err) {
 				if (attempt < 2) { await sleep(1000); continue; }
-				return [0, String((err as Error)?.message || err).slice(0, 400)];
+				return [0, String((err as Error)?.message || err).slice(0, 400), ''];
 			}
 			if (RETRY_STATUSES.has(res[0]) && attempt < 2) { await sleep(1500 * (attempt + 1)); continue; }
 			return res;
 		}
+	};
+	return async (url) => {
+		if (!url.endsWith(LAST_PAGE_MARKER)) {
+			const [status, body] = await withRetry(url);
+			return [status, body];
+		}
+		const base = url.slice(0, -LAST_PAGE_MARKER.length);
+		const first = await withRetry(`${base}&page=1`);
+		const last = lastPageNumber(first[2]);
+		if (first[0] !== 200 || last <= 1) return [first[0], first[1]];
+		const [status, body] = await withRetry(`${base}&page=${last}`);
+		return [status, body];
 	};
 }
 

@@ -90,11 +90,28 @@ def parse_repo(url):
     return (m.group(1), m.group(2).removesuffix(".git")) if m else None
 
 
+LAST_PAGE_MARKER = "&page=last"
+
+
+def last_page_number(link_header):
+    """The page named by a GitHub `Link: <...&page=N>; rel="last"` header, or 0 when there is
+    only one page. The evaluator never sees headers: it asks for `<list url>&page=last` and the
+    fetch layer (this shim in direct mode, the app's fetcher in replay mode) resolves the marker
+    with one extra request. Used for the true first commit of a repo (QA D7)."""
+    for part in str(link_header or "").split(","):
+        if 'rel="last"' in part:
+            m = re.search(r"[?&]page=(\d+)", part)
+            if m:
+                return int(m.group(1))
+    return 0
+
+
 def make_gh(token):
-    """Direct mode: get(url) -> (status, body). Status 0 means the request never completed."""
+    """Direct mode: get(url) -> (status, body). Status 0 means the request never completed.
+    A url ending in `&page=last` is served as the LAST page of that GitHub list."""
     tok = (token or "").strip()
 
-    def get(url):
+    def get_one(url):
         headers = {"User-Agent": UA, "Accept": "application/vnd.github+json"}
         if tok and any(h in url for h in GITHUB_HOSTS):
             headers["Authorization"] = "Bearer " + tok
@@ -102,7 +119,7 @@ def make_gh(token):
         while attempt < 3:
             try:
                 with urlopen(Request(url, headers=headers), timeout=45) as r:
-                    return r.status, r.read().decode("utf-8", "replace")
+                    return r.status, r.read().decode("utf-8", "replace"), r.headers.get("Link", "")
             except HTTPError as e:
                 body = ""
                 try:
@@ -113,14 +130,26 @@ def make_gh(token):
                     time.sleep(1.5 * (attempt + 1))
                     attempt = attempt + 1
                     continue
-                return e.code, body
+                return e.code, body, ""
             except Exception as e:
                 if attempt < 2:
                     time.sleep(1.0)
                     attempt = attempt + 1
                     continue
-                return 0, str(e)
-        return 0, ""
+                return 0, str(e), ""
+        return 0, "", ""
+
+    def get(url):
+        if not url.endswith(LAST_PAGE_MARKER):
+            st, body, _link = get_one(url)
+            return st, body
+        base = url[:-len(LAST_PAGE_MARKER)]
+        st, body, link = get_one(base + "&page=1")
+        last = last_page_number(link)
+        if st != 200 or last <= 1:
+            return st, body
+        st, body, _link = get_one(base + "&page=%d" % last)
+        return st, body
 
     return get
 

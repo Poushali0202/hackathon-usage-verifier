@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+	LAST_PAGE_MARKER,
+	lastPageNumber,
 	CACHE_TOO_LARGE_REASON,
 	MAX_CACHE_BYTES,
 	REPLAY_ROUNDS_REASON,
@@ -168,6 +170,34 @@ describe('fetchInto / makeHttpFetcher', () => {
 		expect(JSON.stringify(seen[1])).not.toContain('ghp_secret');
 		expect(await fetcher('https://api.github.com/user')).toEqual([200, 'ok']);
 		expect(seen[2].bearer_token).toBeUndefined();
+	});
+
+	it('resolves `&page=last` from the Link header with one extra request (QA D7)', async () => {
+		const seen: string[] = [];
+		const list = `${META}/commits?per_page=100`;
+		const client = {
+			tool: async (opts: { input?: Record<string, unknown> }) => {
+				const url = String(opts.input?.url);
+				seen.push(url);
+				if (url === `${list}&page=1`) {
+					return {
+						status_code: 200,
+						body: '["page1"]',
+						headers: { Link: `<${list}&page=2>; rel="next", <${list}&page=33>; rel="last"` },
+					};
+				}
+				if (url === `${list}&page=33`) return { status_code: 200, body: '["oldest"]', headers: {} };
+				return { status_code: 200, body: '["single"]', headers: {} };
+			},
+		};
+		const fetcher = makeHttpFetcher(client, 'task-token', 'ghp_secret');
+		expect(await fetcher(`${list}${LAST_PAGE_MARKER}`)).toEqual([200, '["oldest"]']);
+		expect(seen).toEqual([`${list}&page=1`, `${list}&page=33`]);
+		// a list that fits one page answers page 1 itself
+		expect(await fetcher(`${META}/commits?per_page=100&path=x${LAST_PAGE_MARKER}`)).toEqual([200, '["single"]']);
+		expect(lastPageNumber('<u?page=2>; rel="next", <u?page=7>; rel="last"')).toBe(7);
+		expect(lastPageNumber('')).toBe(0);
+		expect(lastPageNumber(undefined)).toBe(0);
 	});
 
 	it('maps tool errors to status 0 after retries', async () => {

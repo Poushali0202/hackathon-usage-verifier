@@ -445,7 +445,7 @@ describe.skipIf(!LIVE)('eval round 1 live', () => {
 			'# Judge Hack evals, Round 1',
 			'',
 			`Date: ${today}`,
-			'Host: https://staging.rocketride.ai',
+			`Host: ${String(process.env.ROCKETRIDE_URI || '').replace(/:443$/, '')}`,
 			'App: hackjudge.judge-hack',
 			`Build (whereApp): ${buildLine}`,
 			`Account: ${accountName} (name only)`,

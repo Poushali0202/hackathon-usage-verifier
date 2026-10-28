@@ -400,13 +400,14 @@ class TestDetNoteArrow(unittest.TestCase):
 class TestFirstCommitDate(unittest.TestCase):
     """QA D7: the 'work goes back to' date must be the TRUE first commit even when the history is
     longer than one API page (zod, ~3250 commits, was reported as 2026-08-29 instead of 2020-03-07;
-    p-map at 106 commits is the smallest reproduction). The fetcher exposes no headers, so the
-    engine binary-searches GitHub's `until=` filter by day instead of following Link rel=last."""
+    p-map at 106 commits is the smallest reproduction). The evaluator never sees headers and the
+    replay driver allows only a few fetch rounds, so the engine asks for `<list>&page=last`, a
+    marker the fetch layers resolve from page 1's Link header in one extra request."""
 
     @staticmethod
     def _repo(n_commits: int, start: str, path_shas=None, fail_until=False):
         """A fake GitHub commits endpoint: one commit per day from `start`, newest first, honouring
-        per_page / until / since / path the way the real API does."""
+        per_page / page / path the way the real API does, plus the fetch layer's `&page=last`."""
         import json
         from datetime import date, timedelta
         from urllib.parse import parse_qs, urlparse
@@ -421,19 +422,18 @@ class TestFirstCommitDate(unittest.TestCase):
         def gh(url: str):
             calls[0] += 1
             q = parse_qs(urlparse(url).query)
-            if fail_until and "until" in q:
-                return 500, ""
             lst = commits
             if "path" in q and path_shas is not None:
                 lst = [c for c in commits if int(c["sha"], 16) in path_shas]
-            until = q.get("until", [None])[0]
-            since = q.get("since", [None])[0]
-            if until:
-                lst = [c for c in lst if c["commit"]["committer"]["date"] <= until]
-            if since:
-                lst = [c for c in lst if c["commit"]["committer"]["date"] >= since]
+            newest_first = list(reversed(lst))
             per = int(q.get("per_page", ["30"])[0])
-            return 200, json.dumps(list(reversed(lst))[:per])
+            page = q.get("page", ["1"])[0]
+            if page == "last":
+                if fail_until:
+                    return 500, ""
+                page = str(max(1, -(-len(newest_first) // per)))
+            start = (int(page) - 1) * per
+            return 200, json.dumps(newest_first[start:start + per])
 
         return gh, calls
 
@@ -460,7 +460,7 @@ class TestFirstCommitDate(unittest.TestCase):
         self.assertEqual(page[-1]["commit"]["committer"]["date"][:10], "2026-01-24")  # the old, wrong answer
         calls[0] = 0
         self.assertEqual(engine_mod.first_commit_date(gh, "a", "b", page), ("2017-06-10T12:00:00Z", True))
-        self.assertLessEqual(calls[0], 20)
+        self.assertEqual(calls[0], 1)        # one `page=last` request, so one extra replay round at most
 
     def test_just_over_one_page(self):
         import engine as engine_mod
@@ -470,10 +470,17 @@ class TestFirstCommitDate(unittest.TestCase):
 
     def test_per_path_history(self):
         import engine as engine_mod
-        gh, _calls = self._repo(3250, "2017-06-10", path_shas={5, 200, 3000})
+        gh, calls = self._repo(3250, "2017-06-10", path_shas={5, 200, 3000})
         page = self._page(gh, "agent.pipe")
         self.assertEqual(engine_mod.first_commit_date(gh, "a", "b", page, "agent.pipe"),
                          ("2017-06-15T12:00:00Z", True))
+        # a path with more than one page of its own history resolves through page=last as well
+        gh, calls = self._repo(3250, "2017-06-10", path_shas=set(range(3250)))
+        page = self._page(gh, "agent.pipe")
+        calls[0] = 0
+        self.assertEqual(engine_mod.first_commit_date(gh, "a", "b", page, "agent.pipe"),
+                         ("2017-06-10T12:00:00Z", True))
+        self.assertEqual(calls[0], 1)
 
     def test_api_failure_falls_back_to_the_page_and_says_so(self):
         import engine as engine_mod
