@@ -6,10 +6,10 @@ These evals test the decision-making, LLM, and agent-adjacent surfaces of Judge 
 
 | Passed | Failed | Unclear |
 |---:|---:|---:|
-| 0 | 0 | 13 |
+| 12 | 1 | 0 |
 
 ### Defects open
 
-- None.
+- E11: tag=None explain_failed=false usage="The project shows no RocketRide pipeline usage; no pipelines are defined or called in the codebase."
 
 Fixes that come out of this round must cite `evals/EVALS-ROUND-1.md`. Round 2 re-checks every open defect before new cases are added.
