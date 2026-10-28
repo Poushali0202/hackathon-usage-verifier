@@ -1,9 +1,9 @@
 # Judge Hack evals, Round 1
 
-Date: 2026-10-14
+Date: 2026-10-27
 Host: https://staging.rocketride.ai
 App: hackjudge.judge-hack
-Build (whereApp): @team/Development=v55 ready; @me=v55 ready; @team/Production=v55 ready; @public=v55 ready
+Build (whereApp): @team/Development=v60 ready; @me=v62 private; @public=v60 ready; @team/Production=v60 ready
 Account: poushalipurkayastha24 (name only)
 AI narration key name present: yes
 Storage: not observed in the browser. This round called the same `runRepos` / `extractTarget` / `parseCsv` functions Quick verify, New run, and Targets Prefill use, against the signed-in staging connection. Named UI runs were not written to SQL, so there is no blob-fallback banner to quote.
@@ -23,28 +23,20 @@ Framing for Shashi: first eval round on the seed answer key; add your evals on t
 | E7 | Batch path named QA-eval-r1-sheet, event 2026-08-03, penalty 2, preset, eval-sheet.csv | 5 / 5 verified; toolbar Significant: 1, None: 3, FAILED: 1; hopper dossier agrees | 5 / 5 verified; Significant: 1, None: 3, FAILED: 1; hopper tag=Significant, score=4.5, backbone=Yes, flagged=false, predates=false, earliest_commit=2026-08-03, event_window=2026-08-01 → 2026-08-05, history_penalty=2, explain_failed=false | PASS |
 | E12 | Compare hopper score from E1 and from E7 | Identical (4.5 both) | E1 score=4.5 tag=Significant; E7 hopper score=4.5 tag=Significant | PASS |
 | E13 | Batch path named QA-eval-r1-headers, eval-sheet-headers.csv (Project Name / GitHub URL) | Same 5 repos and URLs; counts match E7 | mapped=true urls=https://github.com/vraj00222/hopper https://github.com/octocat/Hello-World https://github.com/sindresorhus/p-map https://github.com/colinhacks/zod https://github.com/Mr-Shockwave/Trailbridge; 5 / 5 verified; Significant: 1, None: 3, FAILED: 1 | PASS |
-| E9 | Prefill path: github.com/topoteretes/cognee + docs.cognee.ai, in-session as Eval-R1-Cognee (not persisted) | Name Cognee not TIER 1; invocation tokens; consumer env keys; cognee-cli; architecture SDK / library | status=complete name="Build AI Memory with Cognee" arch=Data / gateway platform invocation="import cognee / cognee.remember / cognee.recall / cognee.add / cognee.cognify / cognee.memify / cognee.search / cognee.forget" hosted="COGNEE_API_KEY, COGNEE_BACKEND_URL, COGNEE_CLOUD_API_URL, COGNEE_CLOUD_AUTH_TOKEN" cli="cognee-cli demo, cognee-cli -ui, cognee-cli cognify, cognee-cli delete --all" warnings=["Competitors cannot be derived from the vendor repo (its integrations are not rivals) - add them manually.","LLM synthesis unavailable; prefill is deterministic-only."] docs_warning=false | FAIL |
+| E9 | Prefill path: github.com/topoteretes/cognee + docs.cognee.ai, in-session as Eval-R1-Cognee (not persisted) | Name Cognee not TIER 1; invocation tokens; consumer env keys; cognee-cli; architecture SDK / library | status=complete name="Cognee Documentation" arch=Data / gateway platform invocation="import cognee / cognee.remember / cognee.recall / cognee.add / cognee.cognify / cognee.search / cognee.forget" hosted="COGNEE_API_KEY, COGNEE_BACKEND_URL, COGNEE_CLOUD_API_URL, COGNEE_CLOUD_AUTH_TOKEN" cli="cognee-cli demo, cognee-cli -ui, cognee-cli cognify, cognee-cli delete --all" warnings=["Competitors cannot be derived from the vendor repo (its integrations are not rivals) - add them manually.","LLM synthesis unavailable; prefill is deterministic-only."] docs_warning=false | FAIL |
 | E8 | Quick-verify path: vraj00222/hopper against Eval-R1-Cognee, event 2026-08-03, penalty 2 | None. hopper does not use Cognee | tag=None, score=0, backbone=No, flagged=false, predates=false, earliest_commit=2026-08-03, event_window=2026-08-01 → 2026-08-05, history_penalty=2, explain_failed=false | PASS |
-| E10 (advisory) | Read hopper prose from E7 | Paragraphs never state or imply a different tag, score, or backbone; no invented file names | explain_failed=false invented_files=[] description="Hopper is a security vulnerability triage system that traces indirect dependencies (up to five hops deep) in npm packages and determines which vulnerabilities actually affect customers and by when they must be notified under contract terms." usage="The project uses a single RocketRide pipeline with 5 nodes, named ' ', which is called at packages/orchestrate/src/rocketride/client.ts:181. The SDK is invoked across 12 call sites spread over 2 files, with the engine enabled." | PASS |
-| E11 (advisory) | Read zod prose from E7 | A None repo must not claim RocketRide usage | tag=None explain_failed=false usage="The code shows no real RocketRide usage. No pipelines are defined or called in the project." | FAIL |
+| E10 (advisory) | Read hopper prose from E7 | Paragraphs never state or imply a different tag, score, or backbone; no invented file names | explain_failed=false invented_files=[] description="Hopper is a security vulnerability assessment tool that traces transitive dependencies up to five hops deep and determines whether a vulnerability affects a customer, along with contractual notification deadlines based on per-customer SLAs." usage="The project uses RocketRide with a 5-node pipeline named ' ' that is actively called in the code at packages/orchestrate/src/rocketride/client.ts:181, with 12 total SDK call-sites distributed across 2 files." | PASS |
+| E11 (advisory) | Read zod prose from E7 | A None repo must not claim RocketRide usage | tag=None explain_failed=false usage="The code shows no real RocketRide usage. No pipelines are defined or called in the project." | PASS |
 
-Totals: 11 PASS, 2 FAIL, 0 UNCLEAR (13 cases).
+Totals: 12 PASS, 1 FAIL, 0 UNCLEAR (13 cases).
 
 ## Defects
 
 #### E9: Name Cognee not TIER 1; invocation tokens; consumer env keys; cognee-cli; architecture SDK / library
 Severity: medium
 Address: staging.rocketride.ai / hackjudge.judge-hack (live pipe path, not a browser bar)
-Saw: "status=complete name='Build AI Memory with Cognee' arch=Data / gateway platform invocation='import cognee | cognee.remember | cognee.recall | cognee.add | cognee.cognify | cognee.memify | cognee.search | cognee.forget' hosted='COGNEE_API_KEY, COGNEE_BACKEND_URL, COGNEE_CLOUD_API_URL, COGNEE_CLOUD_AUTH_TOKEN' cli='cognee-cli demo, cognee-cli -ui, cognee-cli cognify, cognee-cli delete --all' warnings=['Competitors cannot be derived from the vendor repo (its integrations are not rivals) - add them manually.','LLM synthesis unavailable; prefill is deterministic-only.'] docs_warning=false"
+Saw: "status=complete name='Cognee Documentation' arch=Data / gateway platform invocation='import cognee | cognee.remember | cognee.recall | cognee.add | cognee.cognify | cognee.search | cognee.forget' hosted='COGNEE_API_KEY, COGNEE_BACKEND_URL, COGNEE_CLOUD_API_URL, COGNEE_CLOUD_AUTH_TOKEN' cli='cognee-cli demo, cognee-cli -ui, cognee-cli cognify, cognee-cli delete --all' warnings=['Competitors cannot be derived from the vendor repo (its integrations are not rivals) - add them manually.','LLM synthesis unavailable; prefill is deterministic-only.'] docs_warning=false"
 Expected: "Name Cognee not TIER 1; invocation tokens; consumer env keys; cognee-cli; architecture SDK / library"
 Steps: Prefill path: github.com/topoteretes/cognee + docs.cognee.ai, in-session as Eval-R1-Cognee (not persisted)
-Screenshot: (none; this round was not a browser screenshot pass)
-
-#### E11: A None repo must not claim RocketRide usage
-Severity: low (advisory surface)
-Address: staging.rocketride.ai / hackjudge.judge-hack (live pipe path, not a browser bar)
-Saw: "tag=None explain_failed=false usage='The code shows no real RocketRide usage. No pipelines are defined or called in the project.'"
-Expected: "A None repo must not claim RocketRide usage"
-Steps: Read zod prose from E7
 Screenshot: (none; this round was not a browser screenshot pass)
 
