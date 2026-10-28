@@ -560,5 +560,23 @@ class TestPrefillNameAndPlatform(unittest.TestCase):
         self.assertIn("platform", cfg["types"])
 
 
+class TestExplainPromptAttribution(unittest.TestCase):
+    """QA H2: attribution is never model prose, so no prompt may ask the model for team members."""
+
+    def test_prompt_never_asks_for_team_members(self):
+        import engine
+        self.assertNotIn("team_members", engine.EXPLAIN_PROMPT)
+        evaluation = {"tag": "None", "backbone": "No", "score": 0, "pipelines": [], "platform": None}
+        prompt = engine.explain_prompt(evaluation, "P", "o/r", "",
+                                       "# Proj. Built by Alice and Bob", "RocketRide")
+        self.assertNotIn("team_members", prompt)
+        self.assertIn("README EXCERPT (for project_name / description only)", prompt)
+
+    def test_batch_runner_does_not_copy_prose_names(self):
+        src = (Path(__file__).resolve().parent.parent / "run_batch.py").read_text(encoding="utf-8")
+        self.assertNotIn('prose["team_members"]', src)
+        self.assertNotIn("prose.get(\"team_members\")", src)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -604,8 +604,7 @@ async def verify_one(client, token, row, sem, event_date=None, history_penalty=N
     # README-stated names beat a repo-slug label / an empty team column (never a sheet-given value)
     if label_from_repo and title_upgrades(_repo_name, str(prose.get("project_name") or "")):
         row = {**row, "project": str(prose["project_name"])[:80]}
-    if not (row.get("names") or "").strip() and prose.get("team_members"):
-        row = {**row, "names": str(prose["team_members"])[:200]}
+    # Attribution is never model prose (QA H2): names come from the sheet or stay blank.
     return {
         **row, "repo_accessible": True, "classify_failed": False,   # the verdict never fails now
         "tag": ev["tag"], "backbone": ev["backbone"], "score": ev["score"],

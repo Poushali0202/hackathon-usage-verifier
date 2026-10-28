@@ -538,8 +538,7 @@ Return ONLY a strict JSON object - start with { and end with }, no prose outside
                      'the 7-node agent pipeline is loaded and run at relay.ts:83'). If a pipeline is
                      present but never called, say so explicitly. If a pipeline predates the event
                      window (reused), call that out.>",
-  "project_name": "<ONLY if the README clearly states the project's name - else omit>",
-  "team_members": "<ONLY if the README clearly lists team member names - comma-separated - else omit>"
+  "project_name": "<ONLY if the README clearly states the project's name - else omit>"
 }
 Rules: cite ONLY what is in the evidence. Never contradict the verdict. If the tag is None, state that
 the code shows no real RocketRide usage. Write plainly and never use em dashes anywhere in your
@@ -595,7 +594,7 @@ def explain_prompt(evaluation: dict, project: str, repo: str, feedback: str,
     }
     if evaluation.get("platform"):
         payload["platform_evidence"] = evaluation["platform"]
-    readme_block = (f"\n\nREADME EXCERPT (for project_name / team_members / description only):\n"
+    readme_block = (f"\n\nREADME EXCERPT (for project_name / description only):\n"
                     f"{readme_head[:2500]}" if readme_head else "")
     # retarget display-name mentions only - "rocketride_usage" (the JSON wire key) is lowercase
     # and therefore untouched by this case-sensitive replace
