@@ -141,14 +141,14 @@ def make_gh(token):
 
     def get(url):
         if not url.endswith(LAST_PAGE_MARKER):
-            st, body, _link = get_one(url)
+            st, body, link = get_one(url)
             return st, body
         base = url[:-len(LAST_PAGE_MARKER)]
         st, body, link = get_one(base + "&page=1")
         last = last_page_number(link)
         if st != 200 or last <= 1:
             return st, body
-        st, body, _link = get_one(base + "&page=%d" % last)
+        st, body, link = get_one(base + "&page=%d" % last)
         return st, body
 
     return get

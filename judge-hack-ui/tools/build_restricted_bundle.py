@@ -271,8 +271,43 @@ def build() -> str:
     return "\n".join(parts)
 
 
+def check_restricted_names(text: str) -> None:
+    """RestrictedPython rejects every identifier that starts with an underscore (names, args,
+    attributes, function names). The engine's names are rewritten by Restrict(), but the shim and
+    the drivers are embedded verbatim, and an `_unused` variable there only fails on the live
+    engine (staging run 2026-10-28: every repo came back "Evaluator error: '_link' is an invalid
+    variable name"). Fail the build here instead."""
+    tree = ast.parse(text, filename="evaluator-bundle")
+    bad: list[str] = []
+    for node in ast.walk(tree):
+        names: list[str | None] = []
+        if isinstance(node, ast.Name):
+            names.append(node.id)
+        elif isinstance(node, ast.arg):
+            names.append(node.arg)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.append(node.name)
+        elif isinstance(node, ast.Attribute):
+            names.append(node.attr)
+        elif isinstance(node, ast.keyword):
+            names.append(node.arg)
+        elif isinstance(node, ast.alias):
+            names.extend([node.name, node.asname])
+        elif isinstance(node, ast.ExceptHandler):
+            names.append(node.name)
+        elif isinstance(node, ast.Global):
+            names.extend(node.names)
+        for name in names:
+            if name and name.startswith("_") and name != "_":
+                bad.append(f"line {getattr(node, 'lineno', '?')}: {name}")
+    if bad:
+        raise SystemExit("bundle has identifiers RestrictedPython rejects (leading underscore):\n  "
+                         + "\n  ".join(bad[:20]))
+
+
 if __name__ == "__main__":
     text = build()
+    check_restricted_names(text)
     if len(sys.argv) > 1 and sys.argv[1] != "-":
         pathlib.Path(sys.argv[1]).write_text(text, encoding="utf-8")
     else:
