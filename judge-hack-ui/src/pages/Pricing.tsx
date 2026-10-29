@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { openCheckout, openManageBilling } from '../billing';
-import { BILLING_LIVE } from '../entitlement';
+import { BILLING_LIVE, upgradeTier } from '../entitlement';
 import { Page } from '../components/bits';
 import { useNav } from '../NavContext';
 import { useRuns } from '../RunsContext';
@@ -36,8 +36,10 @@ const METER_POINTS: [string, string][] = [
 	['One simple rate', '$5 per MB of code verified, on every plan. An average repo is 500 KB, so about $2.50 per repo.'],
 	['Prepaid & metered live', 'Pay first, then use. Every verification draws your balance down by the code it actually scans.'],
 	['Hard stop at zero', 'The next run is refused the instant the balance is empty. Usage can never exceed what you paid.'],
-	['Need more?', 'When your allowance runs out, the next run is refused. You can never spend more than you have paid. Upgrading to the next plan is the cheapest way to add capacity.'],
 ];
+
+/** Where the top tier asks for more capacity (QA P2): Organizers has no next plan to point at. */
+export const CONTACT_EMAIL = 'support@rocketride.ai';
 
 export default function Pricing() {
 	const { highlight } = useNav();
@@ -48,6 +50,18 @@ export default function Pricing() {
 	// resolve to the developer tier for entitlements, but their Developer card
 	// must still offer Subscribe, not a manage dialog with nothing to manage.
 	const hasSubscription = ['subscribed', 'trialing', 'past_due'].includes(settings.billingStatus || '');
+	// QA P2: "Need more?" has to give every tier a real answer. Developer and Company are pointed
+	// at the next plan; Organizers is the top plan, so it gets a contact line instead.
+	const needMore = upgradeTier(current)
+		? 'When your allowance runs out, the next run is refused. You can never spend more than you have paid. Upgrading to the next plan is the cheapest way to add capacity.'
+		: (
+			<>
+				When your allowance runs out, the next run is refused. You can never spend more than you
+				have paid. Organizers is the top plan, so{' '}
+				<a href={`mailto:${CONTACT_EMAIL}?subject=Judge%20Hack%20capacity`}>contact us</a> and we
+				will arrange more capacity for your event.
+			</>
+		);
 
 	useEffect(() => {
 		if (!pin) return;
@@ -112,6 +126,10 @@ export default function Pricing() {
 							<p className="muted" style={{ fontSize: 12.5, margin: '4px 0 0', lineHeight: 1.6 }}>{d}</p>
 						</div>
 					))}
+					<div key="need-more">
+						<b style={{ fontSize: 13.5 }}>Need more?</b>
+						<p className="muted" style={{ fontSize: 12.5, margin: '4px 0 0', lineHeight: 1.6 }}>{needMore}</p>
+					</div>
 				</div>
 				<p className="muted" style={{ fontSize: 12, margin: '14px 0 0' }}>
 					Each run is refused once the included allowance is empty, and a sheet that would

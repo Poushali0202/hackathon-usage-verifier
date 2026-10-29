@@ -88,6 +88,15 @@ describe('Plans copy', () => {
 			'When your allowance runs out, the next run is refused. You can never spend more than you have paid. Upgrading to the next plan is the cheapest way to add capacity.',
 		);
 		expect(src).not.toMatch(/top-ups?/i);
+	});
+
+	it('gives Organizers a contact line instead of an upgrade pitch (QA P2)', () => {
+		// upgradeTier() is null on the top tier; that branch must offer a way to ask for capacity.
+		expect(src).toContain('upgradeTier(current)');
+		expect(src).toContain('Organizers is the top plan, so');
+		expect(src).toContain('contact us</a>');
+		expect(src).toMatch(/href=\{`mailto:\$\{CONTACT_EMAIL\}/);
+		expect(src).toMatch(/export const CONTACT_EMAIL = '[^']+@rocketride\.ai'/);
 		expect(src).not.toMatch(/auto-recharge/i);
 		expect(src).not.toMatch(/premium per-KB/i);
 		expect(src).not.toContain('\u2014');

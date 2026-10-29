@@ -147,7 +147,7 @@ never a pass or a fail.
 
 | ID | Do | Expect |
 |---|---|---|
-| A1 | Open `https://staging.rocketride.ai`, launch **Judge Hack** from the switcher, and sign in if asked. | The app shell loads: a left rail reading, in order, "Dashboard", "Targets", "New run", "Quick verify", "Runs", "Plans", "Settings", with Dashboard open. |
+| A1 | Open `https://staging.rocketride.ai`, launch **Judge Hack** from the switcher, and sign in if asked. | The app shell loads: a left rail reading, in order, "Dashboard", "Targets", "New run", "Quick verify", "Runs", "Plans", "Settings". The page that opens is the one you had open last time (Dashboard on a first launch); the app restores it on purpose. |
 | A2 | Read the top of the Dashboard for a storage notice. | Either no notice (SQL is live), or the exact banner "Runs are saved in this workspace only until storage reconnects." Record which. Any third wording is a FAIL. |
 | A3 | Read the signed-in card. | "Signed in with RocketRide", then your name and email, then a plan name (Developer / Company / Organizers), optional billing status, and an "X of Y left" allowance line. **Subscribe** and **Plans** buttons are present. |
 | A4 | In the page header, press the theme button (it reads **Light** when the page is dark, **Dark** when the page is light), then fully reload. | The theme flips, and after the reload it is still the one you chose. Flip it back. |
@@ -238,7 +238,7 @@ This plan creates five runs: `QA-core-sheet`, `QA-core-flag`,
 |---|---|---|
 | U1 | Open **Runs**. | Those runs are listed, newest first. Columns: Run, Event date, Repos, Duration, Significant, Flagged, Status. There is **no** None column and **no** FAILED column. |
 | U2 | Open `QA-core-sheet` from the list. | The same grid as section 4: five rows, same tags, toolbar `Significant: 1 · None: 3 · FAILED: 1`. |
-| U3 | For `QA-core-sheet` only, compare three surfaces. | The Runs row reads Repos `5 / 5`, Significant `1`, Flagged `0`. The grid has five rows and the toolbar counts above. Dashboard tiles are workspace-wide (they include leftover runs); do not require them to equal 5. Two surfaces of **this run** disagreeing is severity medium. |
+| U3 | For `QA-core-sheet` only, compare three surfaces. | The Runs row reads Repos `5 / 5`, Significant `1`, Flagged `3` (hello-world, p-map and zod all predate the event window, and flagging pre-existing work is intended). The grid has five rows and the toolbar counts above. Dashboard tiles are workspace-wide (they include leftover runs); do not require them to equal 5. Two surfaces of **this run** disagreeing is severity medium. |
 | U4 | Fully reload the browser and reopen **Runs**. | The same runs are still listed. Persistence held in whichever storage state A2 recorded. |
 
 ---
@@ -250,7 +250,7 @@ No purchase is made in this run. Completing Stripe checkout belongs in the exten
 | ID | Do | Expect |
 |---|---|---|
 | P1 | Open **Plans**. | Intro mentions prepaid allowance and the RocketRide billing modal. Three cards: Developer **$20 per month** with "4 MB included · about 8 repos", Company **$100 per month** with "20 MB included · about 40 repos", Organizers **$200 per month** with "40 MB included · about 80 repos". Each card's button is enabled and reads **Subscribe \<plan\> →** (or **Manage billing →** on the current plan). |
-| P2 | Read the **How metering works** block. | Four headings, in order: "One simple rate", "Prepaid & metered live", "Hard stop at zero", "Need more?". Under the first: "$5 per MB of code verified, on every plan. An average repo is 500 KB, so about $2.50 per repo." Under the third: "The next run is refused the instant the balance is empty. Usage can never exceed what you paid." Under the fourth: "When your allowance runs out, the next run is refused. You can never spend more than you have paid. Upgrading to the next plan is the cheapest way to add capacity." Developer card lists "2 custom targets". No mention of metered top-ups or auto-recharge. |
+| P2 | Read the **How metering works** block. | Four headings, in order: "One simple rate", "Prepaid & metered live", "Hard stop at zero", "Need more?". Under the first: "$5 per MB of code verified, on every plan. An average repo is 500 KB, so about $2.50 per repo." Under the third: "The next run is refused the instant the balance is empty. Usage can never exceed what you paid." Under the fourth, on Developer or Company: "When your allowance runs out, the next run is refused. You can never spend more than you have paid. Upgrading to the next plan is the cheapest way to add capacity." On Organizers (the top plan) the last sentence is instead "Organizers is the top plan, so contact us and we will arrange more capacity for your event.", with "contact us" an email link. Developer card lists "2 custom targets". No mention of metered top-ups or auto-recharge. |
 
 ---
 
